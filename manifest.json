@@ -1,0 +1,15 @@
+{
+  "name": "Light Them Up",
+  "short_name": "Light Them Up",
+  "description": "Upali svetla u svom kvartu: lampe, servis, huligani i lopovi.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0b0f1c",
+  "theme_color": "#0b0f1c",
+  "icons": [
+    {"src": "slike/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "slike/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

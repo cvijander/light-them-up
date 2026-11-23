@@ -1,0 +1,5 @@
+Light Them Up
+
+Otvori index.html u Chrome-u (dupli klik) i igra radi bez interneta.
+Ceo kod igre je u index.html (HTML, CSS i JavaScript u jednom fajlu). Otvori ga u VS Code-u da ga vidis.
+U folderu slike su naslovna za Google Play (1024x500 i 2048x1000) i logo.
