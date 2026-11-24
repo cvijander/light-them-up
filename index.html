@@ -27,8 +27,8 @@ html,body{background:var(--night);color:var(--ink);margin:0}
 body{font-family:var(--body);font-size:15px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
   padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));padding-block:10px 24px}
 button{font:inherit;color:inherit}
-.app{max-width:1060px;margin:0 auto;display:grid;gap:10px}
-@media (min-width:900px){.app{grid-template-columns:minmax(0,auto) 360px;align-items:start}.side{position:sticky;top:10px}.main{position:sticky;top:10px;align-self:start}}
+.app{max-width:1240px;margin:0 auto;display:grid;gap:10px}
+@media (min-width:900px){.app{grid-template-columns:minmax(0,1fr) 360px;align-items:start}.side{position:sticky;top:10px}.main{position:sticky;top:10px;align-self:start}}
 .main{display:grid;gap:8px;min-width:0}
 header{display:flex;align-items:center;gap:8px}
 header h1{font-family:var(--display);font-size:28px;line-height:1;margin:0;letter-spacing:.02em;text-transform:uppercase;flex:1;min-width:0;white-space:nowrap}
@@ -50,6 +50,7 @@ header h1 span{color:var(--sodium)}
 .chip i span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .chip i .svg-ico{width:11px;height:11px;vertical-align:0;opacity:.85}
 @media (max-width:380px){.chip i .svg-ico{display:none!important}}
+@media (max-width:360px){.chip b{font-size:16px!important}.tool .pct{font-size:9.5px!important}.tool .pr{font-size:13px!important}}
 .icon-btn.night{background:#20284a;border-color:#3b4a80}
 .icon-btn:focus-visible,.tool:focus-visible,.up:focus-visible,.big:focus-visible,.shop-btn:focus-visible,.ghost:focus-visible,.fab:focus-visible{outline:2px solid var(--sodium);outline-offset:2px}
 .hud{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
@@ -89,7 +90,8 @@ body.tut-on .tool.bl,body.tut-on .grp.g2,body.tut-on #btnRef{visibility:hidden}
 .tut-hi{outline:3px solid var(--sodium)!important;outline-offset:3px;animation:tutp 1s ease-in-out infinite}
 @keyframes tutp{50%{outline-color:rgba(241,196,83,.25)}}
 .zoom{position:absolute;right:8px;bottom:30px;z-index:4;display:flex;flex-direction:column;gap:8px}
-.zoom button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(8,10,20,.82);color:#ece6d6;font:700 26px/1 Barlow,sans-serif;cursor:pointer}
+.zoom button{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(8,10,20,.78);color:#ece6d6;font:700 26px/1 Barlow,sans-serif;cursor:pointer}
+.zoom #zFit{font-size:22px}
 .mapsel{margin:4px 0 12px}
 .mapbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .mapb{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:12px;padding:10px 8px;font-family:var(--display);font-size:17px;cursor:pointer}
@@ -115,7 +117,8 @@ body.tut-on .tool.bl,body.tut-on .grp.g2,body.tut-on #btnRef{visibility:hidden}
 .city .ghost{width:100%}
 .city .city-pick{display:block;width:100%;margin-top:6px;min-height:40px;text-align:left;font-size:13px;padding:6px 10px}
 .up.armed{border-color:#f1c453;box-shadow:0 0 0 2px rgba(241,196,83,.35)}
-.stage{position:relative;aspect-ratio:620/1000;width:min(100%,calc((100dvh - 150px)*0.62));min-width:min(100%,300px);max-width:100%;margin-inline:auto;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#05070f}
+.stage-wrap{display:flex;justify-content:center;align-items:flex-start;min-width:0}
+.stage{position:relative;width:100%;height:60vh;max-width:100%;margin-inline:auto;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#05070f}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
 .fab{position:absolute;right:8px;bottom:8px;min-width:64px;min-height:52px;border-radius:14px;border:1px solid #3b4a80;background:rgba(19,26,44,.92);color:var(--ref);cursor:pointer;padding:5px 8px;text-align:center;line-height:1.1}
 .fab b{display:block;font-family:var(--display);font-size:15px;text-transform:uppercase}
@@ -214,19 +217,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
   .app{height:calc(100dvh - 12px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;overflow:hidden}
   .main{flex:1 1 0;min-height:0;display:flex;flex-direction:column;gap:6px}
   header h1{font-size:21px} header h1 small{display:none} .logo .hlogo{height:42px;max-width:100%;object-fit:contain;object-position:left center}
-  .icon-btn{height:38px;padding:0 9px}
+  .icon-btn{height:42px;padding:0 10px}
   .hud{gap:4px}
-  .chip{padding:3px 5px} .chip b{font-size:17px} .chip i{font-size:9.5px;letter-spacing:0;gap:2px} .chip i .svg-ico{width:10px;height:10px}
+  .chip{padding:4px 5px} .chip b{font-size:19px} .chip i{font-size:10.5px;letter-spacing:0;gap:2px} .chip i .svg-ico{width:11px;height:11px}
   .stage-wrap{flex:1 1 0;min-height:0;display:flex;justify-content:center;align-items:flex-start}
   .stage{width:auto;min-width:0;aspect-ratio:auto;margin:0}
+  .zoom{bottom:8px;right:6px;gap:6px} .zoom button{width:40px;height:40px;font-size:22px;background:rgba(8,10,20,.6)} .zoom #zFit{font-size:18px}
   .msg{min-height:17px;font-size:13px;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .actions .msg{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:12.5px;line-height:15px;text-align:left}
+  .actions .msg{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px;line-height:16px;text-align:left}
   .side{flex:0 0 auto;gap:8px}
   .sec-lamps h2,.notool,.sec-ups,.rules,.info,.foot{display:none}
   .bar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px 3px}
   .shop-top{display:inline-flex;align-items:center}
   .shop-btn{display:none!important}
-  .grp.g2{grid-column:span 4} .grp{grid-column:span 3;font-size:9.5px;margin:0;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .grp.g2{grid-column:span 4} .grp{grid-column:span 3;font-size:10.5px;margin:0;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .grp.g1{order:0} .grp.g2{order:1;color:var(--warn)} .tool.fx{order:2} .tool.bl{order:3}
   .tool{padding:4px 5px}
   .tools{display:contents}
@@ -238,11 +242,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
   .tool{padding:4px 4px} .tool .nm{font-size:12.5px;padding-right:0;white-space:nowrap;overflow:hidden;text-overflow:clip;letter-spacing:-.01em}
   .tool .bulb{display:none} .tool .tg{display:none}
   .tool.fx .rbar{height:5px} .tool.bl .rbar i{background:var(--warn)}
-  .tool .pr{font-size:13px}
+  .tool .pr{font-size:14.5px}
   .tool .nm{display:none} .tool{display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 2px 3px}
-  .tool .ico{width:26px;height:26px;margin:0 0 1px} .tool .rbar{width:100%;margin-top:2px}
-  .tool .top{display:flex;align-items:center;justify-content:center;gap:1px} .tool.bl .ico{width:22px;height:26px}
-  .tool .pct{display:block;font-size:9.5px;font-weight:700;color:var(--warn);line-height:1;letter-spacing:-.03em}
+  .tool .ico{width:30px;height:30px;margin:0 0 1px} .tool .rbar{width:100%;margin-top:2px}
+  .tool .top{display:flex;align-items:center;justify-content:center;gap:1px} .tool.bl .ico{width:26px;height:30px}
+  .tool .pct{display:block;font-size:11px;font-weight:700;color:var(--warn);line-height:1;letter-spacing:-.03em}
   body.shop-open .tool{display:block;text-align:left;padding:8px} body.shop-open .tool .nm{display:block} body.shop-open .tool .ico{width:30px;height:30px;margin-bottom:4px} body.shop-open .tool .pct{display:none} body.shop-open .tool .top{display:block}
   .shop-btn{display:block;min-width:76px;font-size:14px}
   body.shop-open .scrim{display:block;position:fixed;inset:0;z-index:39;background:rgba(3,5,12,.55)}
@@ -283,7 +287,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
     <div class="stage-wrap" id="stageWrap">
       <div class="stage" id="stage">
         <canvas id="cv" aria-label="Mapa kvarta"></canvas>
-        <div class="zoom" id="zoomBox" hidden><button type="button" id="zIn" aria-label="Uveličaj">+</button><button type="button" id="zOut" aria-label="Umanji">−</button></div>
+        <div class="zoom" id="zoomBox" hidden><button type="button" id="zIn" aria-label="Uveličaj">+</button><button type="button" id="zOut" aria-label="Umanji">−</button><button type="button" id="zFit" aria-label="Cela mapa">⤢</button></div>
         <div class="dawn" id="dawn" hidden role="dialog" aria-label="Izveštaj u zoru"><div class="dn-t"></div><div class="dn-rows"></div><ul class="dn-notes"></ul><button class="big" id="dawnOk" type="button">U redu</button></div>
       </div>
     </div>
@@ -974,28 +978,27 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
 const dark = document.createElement("canvas"), dctx = dark.getContext("2d");
 const bg = document.createElement("canvas"), bctx = bg.getContext("2d");
-let sc = 1, cssW = 1;
-// Borča map zoom: VZ = zoom, VX/VY = world point at the top-left of the screen. The invented quarter always stays at 1.
+let sc = 1, cssW = 1, cssH = 1;
+// Map camera: VZ = zoom, VX/VY = world point at the top-left of the screen. At VZ = 1 the map fills the width of the screen.
+// VSH() = how many map units the screen shows from top to bottom at VZ = 1 (the screen can be shorter than the map, then you scroll).
 let VZ = 1, VX = 0, VY = 0, bgV = {z:1, x:0, y:0};
 const VT = c => c.setTransform(sc * VZ, 0, 0, sc * VZ, -VX * sc * VZ, -VY * sc * VZ);
 function resize() {
-  const r = cv.getBoundingClientRect(); cssW = Math.max(1, r.width);
+  const r = cv.getBoundingClientRect(); cssW = Math.max(1, r.width); cssH = Math.max(1, r.height);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = dark.width = bg.width = Math.max(1, Math.round(r.width * dpr));
-  cv.height = dark.height = bg.height = Math.max(1, Math.round(r.width * dpr * VH() / W));
-  sc = cv.width / W; drawBg();
+  cv.height = dark.height = bg.height = Math.max(1, Math.round(r.height * dpr));
+  sc = cv.width / W; fixView(); drawBg();
 }
 new ResizeObserver(resize).observe(cv);
-function fitWide() {   // wide screens: shrink the map so the buttons under it (Postavi, arrows) stay on screen without scrolling
-  const st = document.querySelector(".stage"), wr = $("stageWrap"); if (!st || !wr) return;
-  st.style.maxWidth = ""; st.style.minWidth = ""; if (innerWidth < 900) return;
-  const r = st.getBoundingClientRect(), over = wr.getBoundingClientRect().bottom + 62 - innerHeight;
-  if (over > 0 && r.height > 0) { st.style.minWidth = "0"; st.style.maxWidth = Math.max(200, r.width * (r.height - over) / r.height) + "px"; }
-}
-addEventListener("resize", fitWide); setTimeout(fitWide, 50);
+const VSH = () => W * cssH / cssW;
+const ZMAX = 3.5, zMin = () => Math.min(1, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
+const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
+function fixView() { VZ = clamp(VZ, zMin(), ZMAX); VX = fitV(VX, W, W / VZ); VY = fitV(VY, VH(), VSH() / VZ); }
+const canPan = () => W / VZ < W - .5 || VSH() / VZ < VH() - .5;
 
 function drawBg() {
-  const c = bctx; VT(c); bgV = {z:VZ, x:VX, y:VY};
+  const c = bctx; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, bg.width, bg.height); VT(c); bgV = {z:VZ, x:VX, y:VY};
   c.fillStyle = "#17211b"; c.fillRect(0, 0, W, H);
   if (MAP) { drawBgMap(c); return; }
   let s2 = 3; const r2 = () => { s2 = (s2 * 9301 + 49297) % 233280; return s2 / 233280; };
@@ -1261,7 +1264,7 @@ function slotAt(p, rad) {
   for (const s of slots) { const d = s.axis === "xy" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
   return best;
 }
-function toWorld(e) { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W / VZ + VX, y:(e.clientY - r.top) / r.height * VH() / VZ + VY}; }
+function toWorld(e) { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W / VZ + VX, y:(e.clientY - r.top) / r.height * VSH() / VZ + VY}; }
 const hitR = () => Math.max(22, 16 * W / cssW) / VZ;
 
 cv.addEventListener("pointerdown", e => {
@@ -1401,7 +1404,7 @@ document.addEventListener("pointermove", e => {
   const r = cv.getBoundingClientRect(), cx = e.clientX, cy = e.clientY - 34;
   const pd = S.pending;
   if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) { if (pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by); S.pending = null; msg(Tx("Prevuci svetiljku na mapu, pored ulice ili u park.")); return; }
-  const p = {x:(cx - r.left) / r.width * W / VZ + VX, y:(cy - r.top) / r.height * VH() / VZ + VY}, sp = palSpot(p);
+  const p = {x:(cx - r.left) / r.width * W / VZ + VX, y:(cy - r.top) / r.height * VSH() / VZ + VY}, sp = palSpot(p);
   if (sp !== pd && pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by);
   if (!sp) { S.pending = null; msg(MAP ? Tx("Ovde ne može: to su kuće i dvorišta. Lampa ide samo pored ulice ili u park, i samo se oni broje u Svetlo %.") : Tx("Ovde ne može: lampa ide pored ulice ili u park, ne preblizu druge lampe."), true); return; }
   S.pending = sp; S.sel = sp; if (!sp.lamp && sp !== tmp) moveSlot(sp, p.x, p.y);
@@ -2803,7 +2806,7 @@ function render() {
   }
   ctx.globalAlpha = 1;
   // badges (faded while choosing a lamp, so the top of the map stays clear)
-  const UK = MAP ? clamp(380 / cssW, 1, 1.7) : 1, UW = W / UK; ctx.setTransform(sc * UK, 0, 0, sc * UK, 0, 0);
+  const UK = clamp(560 / cssW, .6, MAP ? 1.7 : 1.3), UW = W / UK; ctx.setTransform(sc * UK, 0, 0, sc * UK, 0, 0);
   ctx.globalAlpha = S.tool ? (MAP ? .85 : .12) : 1;
   ctx.font = "600 13px Barlow, sans-serif"; ctx.textAlign = "left";
   const toneLine = d => { const t = districtTone(d); return t.tones.size === 0 ? null : t.tone ? [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: sve ${t.tone} svetlo +25%`, "#7ed39a"] : [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: mešano svetlo, bez bonusa`, "#f1c453"]; };
@@ -2818,7 +2821,9 @@ function render() {
   const hl = S.phase === "day" ? Tx("Dan: popravke −50%") : S.patrol ? Tx("Patrola obilazi kvart…") : S.calm > 0 ? Tx`Mirno još ${fmtT(S.calm)}` : S.night < GANG_N ? Tx("Huligani dolaze od 2. noći") : BL && S.night === 1 && S.phase === "night" ? (MAP && MAP.part === "my" ? Tx`Težina ${BL + 1}: banda te već zna` : Tx`Težina Borče ${BL + 1}: banda te već zna`) : "";
   ctx.textAlign = "right";
   const rl = [gl, hl, wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : ""].filter(Boolean);
-  rl.forEach((t, i) => { const w2 = ctx.measureText(t).width + 16; ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(UW - 8 - w2, 8 + i * 26, w2, 22); ctx.fillStyle = i ? "#c9cfdb" : "#f1c453"; ctx.fillText(t, UW - 16, 24 + i * 26); });
+  const lw = left.map(([t, c, f]) => ctx.measureText(t).width + 16 + (f ? 16 : 0));   // on a narrow screen the right badges go under the left ones instead of over them
+  const ro = rl.some((t, i) => ctx.measureText(t).width + 16 + (i < lw.length ? lw[i] : i === lw.length ? 160 : 0) + 24 > UW) ? ly + 14 - 8 : 0;
+  rl.forEach((t, i) => { const w2 = ctx.measureText(t).width + 16; ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(UW - 8 - w2, ro + 8 + i * 26, w2, 22); ctx.fillStyle = i ? "#c9cfdb" : "#f1c453"; ctx.fillText(t, UW - 16, ro + 24 + i * 26); });
   // the gang meter lives under the map (#gang), where it stays readable on any screen
   ctx.textAlign = "left";
   if (S.flashCd > 0) { ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly + 14, 130, 20); ctx.fillStyle = "#8f98ae"; ctx.font = "500 12px Barlow, sans-serif"; ctx.fillText(Tx("Baterija se puni…"), 16, ly + 28); }
@@ -2830,7 +2835,7 @@ function render() {
       ctx.font = "bold 12px system-ui"; ctx.textAlign = "center"; const tx = ok ? Tx("ČUVAJ") : "OBIJENA"; const w = ctx.measureText(tx).width + 10;
       ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(h.cx - w / 2, h.y - 22, w, 16); ctx.fillStyle = ok ? "#7ed39a" : "#ff6b5b"; ctx.fillText(tx, h.cx, h.y - 10); } }
   for (const t of thieves) if (t.rep > 0) {   // residents reported this thief
-    const pu = (performance.now() / 200 | 0) % 2, by = boundY(), ex = clamp(t.x, VX + 16 / VZ, VX + (W - 16) / VZ), ey = clamp(t.y, VY + 16 / VZ, Math.min(by, VY + VH() / VZ) - 16 / VZ);
+    const pu = (performance.now() / 200 | 0) % 2, by = boundY(), ex = clamp(t.x, VX + 16 / VZ, VX + (W - 16) / VZ), ey = clamp(t.y, VY + 16 / VZ, Math.min(by, VY + VSH() / VZ) - 16 / VZ);
     ctx.strokeStyle = pu ? "#ff6b5b" : "#ffd84a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, 13, 0, 6.28); ctx.stroke();
     ctx.fillStyle = "#ffd84a"; ctx.strokeStyle = "#0b1120"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ex, ey - 11); ctx.lineTo(ex + 11, ey + 8); ctx.lineTo(ex - 11, ey + 8); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#0b1120"; ctx.font = "800 13px Barlow, sans-serif"; ctx.textAlign = "center"; ctx.fillText("!", ex, ey + 6);
@@ -2844,14 +2849,15 @@ function render() {
     ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(t.x - tw / 2, ly2 - 12, tw, 16); ctx.fillStyle = "#ffd84a"; ctx.fillText(lbl, t.x, ly2);
   }
   ctx.setTransform(sc, 0, 0, sc, 0, 0);   // attribution and banners stay on the screen, not on the map
-  if (MAP) { ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "rgba(8,10,20,.7)"; ctx.fillRect(W - 166, H - 20, 160, 16); ctx.fillStyle = "#c9cfdb"; ctx.fillText(Tx("© OpenStreetMap saradnici"), W - 10, H - 8); ctx.textAlign = "left"; }
+  if (MAP) { ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "rgba(8,10,20,.7)"; ctx.fillRect(W - 166, VSH() - 20, 160, 16); ctx.fillStyle = "#c9cfdb"; ctx.fillText(Tx("© OpenStreetMap saradnici"), W - 10, VSH() - 8); ctx.textAlign = "left"; }
   if (S.banner) {
     const b = S.banner; b.t += 1 / 60; const a = Math.min(1, b.t * 3, (5 - b.t) * 2);
     if (b.t > 5) S.banner = null; else {
-      ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.fillRect(24, 400, W - 48, 140);
-      ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 2; ctx.strokeRect(24, 400, W - 48, 140);
-      ctx.textAlign = "center"; ctx.fillStyle = "#f1c453"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(b.title, W / 2, 446);
-      ctx.fillStyle = "#ece6d6"; ctx.font = "500 15px Barlow, sans-serif"; wrapText(b.sub, W / 2, 474, W - 80, 19); ctx.globalAlpha = 1; ctx.textAlign = "left";
+      const y0 = Math.round(Math.min(400, VSH() / 2 - 70));   // in the middle of the screen, however tall it is
+      ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.fillRect(24, y0, W - 48, 140);
+      ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 2; ctx.strokeRect(24, y0, W - 48, 140);
+      ctx.textAlign = "center"; ctx.fillStyle = "#f1c453"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(b.title, W / 2, y0 + 46);
+      ctx.fillStyle = "#ece6d6"; ctx.font = "500 15px Barlow, sans-serif"; wrapText(b.sub, W / 2, y0 + 74, W - 80, 19); ctx.globalAlpha = 1; ctx.textAlign = "left";
     }
   }
 }
@@ -2950,12 +2956,18 @@ function drawRadar(s, m) {
 // ---------- Phone layout: fit the map, shop sheet ----------
 const mq = matchMedia("(max-width:899px)"), wrapEl = $("stageWrap"), stageEl = $("stage");
 let lastVH = 0;
+// The map takes all the free space. It is as wide as the space allows (up to about 1.2 screen px per map unit on a computer),
+// and when the screen is shorter than the map you scroll it with a finger or the mouse.
 function fitStage() {
-  if (mq.matches) { const r = wrapEl.getBoundingClientRect(); const w = Math.max(120, Math.floor(Math.min(r.width, r.height * W / VH()))); stageEl.style.width = w + "px"; stageEl.style.height = Math.floor(w * VH() / W) + "px"; stageEl.style.aspectRatio = ""; }
-  else { stageEl.style.width = ""; stageEl.style.height = ""; stageEl.style.aspectRatio = `${W}/${VH()}`; }
+  let aw = wrapEl.clientWidth, ah;
+  if (mq.matches) { wrapEl.style.height = ""; ah = wrapEl.getBoundingClientRect().height; }
+  else { const below = $("actions").offsetHeight + 62 + 26; ah = innerHeight - (wrapEl.getBoundingClientRect().top + scrollY) - below; ah = Math.max(320, ah); wrapEl.style.height = ah + "px"; }
+  aw = Math.max(120, aw); ah = Math.max(120, ah);
+  const w = Math.floor(Math.min(aw, (mq.matches ? Math.max(ah * W / VH(), ah * 1.5) : Math.max(ah * W / VH(), 1.2 * W)))), h = Math.floor(Math.min(ah, w * VH() / W));
+  stageEl.style.width = w + "px"; stageEl.style.height = h + "px"; stageEl.style.aspectRatio = "";
   lastVH = VH();
 }
-new ResizeObserver(fitStage).observe(wrapEl); mq.addEventListener("change", fitStage); fitStage();
+new ResizeObserver(fitStage).observe(wrapEl); mq.addEventListener("change", fitStage); addEventListener("resize", fitStage); fitStage();
 let shopPaused = false;
 function setShop(open) {
   document.body.classList.toggle("shop-open", open);
@@ -2969,34 +2981,36 @@ $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
+  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W}), toWorld,
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }};
 
 
-// ---------- Borča zoom: two fingers pinch and move, one finger moves the map, mouse wheel, + and − ----------
-const ZMAX = 3.5;
+// ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
+const ZKEY = MAP ? "lightThemUp.zoom" : "lightThemUp.zoomQ";
 function setView(z, x, y) {
-  VZ = clamp(z, 1, ZMAX); VX = clamp(x, 0, W - W / VZ); VY = clamp(y, 0, VH() - VH() / VZ); bgLater();
-  try { localStorage.setItem("lightThemUp.zoom", VZ.toFixed(2)); } catch (e) {}
+  VZ = z; VX = x; VY = y; fixView(); bgLater();
+  try { localStorage.setItem(ZKEY, VZ.toFixed(2)); } catch (e) {}
 }
 let bgT = null, bgLast = 0;
 function bgLater() { const now = performance.now(); if (now - bgLast > 120) { bgLast = now; drawBg(); } clearTimeout(bgT); bgT = setTimeout(() => { bgLast = performance.now(); drawBg(); }, 130); }
-function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = clamp(z, 1, ZMAX); setView(nz, wx - ux / nz, wy - uy / nz); }
-if (MAP) {
+function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = clamp(z, zMin(), ZMAX); setView(nz, wx - ux / nz, wy - uy / nz); }
+{
   $("zoomBox").hidden = false;
-  let z0 = 1.6; try { const v = parseFloat(localStorage.getItem("lightThemUp.zoom")); if (v >= 1) z0 = v; } catch (e) {}
-  VZ = clamp(z0, 1, ZMAX); VX = (W - W / VZ) / 2; VY = (VH() - VH() / VZ) / 2; drawBg();
-  $("zIn").onclick = () => zoomAt(VZ * 1.35, W / 2, VH() / 2);
-  $("zOut").onclick = () => zoomAt(VZ / 1.35, W / 2, VH() / 2);
+  let z0 = MAP ? 1.6 : 1; try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
+  VZ = z0; VX = (W - W / VZ) / 2; VY = MAP ? (VH() - VSH() / VZ) / 2 : 0; fixView(); drawBg();   // the invented quarter starts at the top, where the gang and the generator are
+  $("zIn").onclick = () => zoomAt(VZ * 1.35, W / 2, VSH() / 2);
+  $("zOut").onclick = () => zoomAt(VZ / 1.35, W / 2, VSH() / 2);
+  $("zFit").onclick = () => zoomAt(zMin(), W / 2, VSH() / 2);
   const stage = $("stage"), pts = new Map(); let pinch = null, pan = null, defer = null, replay = false;
   // In Borča a touch is held back until the finger lifts: a short tap acts like before, any drag only moves the map.
   // Only a touch right on the lamp you are placing goes through at once, so that lamp can still be dragged.
   const nearPending = e => { const pd = S.pending; if (!pd || pd.lamp || pd.job) return false; const p = toWorld(e); return Math.hypot(pd.x - p.x, pd.y - p.y) < hitR() * 1.6; };
   const fire = (type, d) => { replay = true; try { cv.dispatchEvent(new PointerEvent(type, {clientX:d.x, clientY:d.y, pointerId:d.id, pointerType:d.type, isPrimary:true, bubbles:true, cancelable:true})); } finally { replay = false; } };
-  const unit = e => { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W, y:(e.clientY - r.top) / r.height * VH()}; };
+  const unit = e => { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W, y:(e.clientY - r.top) / r.height * VSH()}; };
   stage.addEventListener("pointerdown", e => {
     if (e.target !== cv || replay) return;
     pts.set(e.pointerId, unit(e));
-    if (pts.size === 1 && e.pointerType !== "mouse" && !nearPending(e)) { defer = {x:e.clientX, y:e.clientY, id:e.pointerId, type:e.pointerType}; e.stopPropagation(); e.preventDefault(); }
+    if (pts.size === 1 && (e.pointerType !== "mouse" || canPan()) && (MAP || canPan()) && !nearPending(e)) { defer = {x:e.clientX, y:e.clientY, id:e.pointerId, type:e.pointerType}; e.stopPropagation(); e.preventDefault(); }
     if (pts.size === 2) {   // second finger: stop whatever the first one started and zoom instead
       cv.dispatchEvent(new Event("pointercancel")); defer = null;
       const [a, b] = [...pts.values()]; pinch = {d:Math.hypot(a.x - b.x, a.y - b.y) || 1, z:VZ, wx:(a.x + b.x) / 2 / VZ + VX, wy:(a.y + b.y) / 2 / VZ + VY}; pan = null;
@@ -3011,7 +3025,7 @@ if (MAP) {
       const [a, b] = [...pts.values()], z = clamp(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, 1, ZMAX), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       setView(z, pinch.wx - mx / z, pinch.wy - my / z); e.stopPropagation(); return;
     }
-    if (pan && !drag && VZ > 1.01) {   // one finger on the map with no lamp in hand moves the view
+    if (pan && !drag && canPan()) {   // one finger on the map with no lamp in hand moves the view
       if (!pan.on && Math.hypot(u.x - pan.u.x, u.y - pan.u.y) > 14) pan.on = true;
       if (pan.on) { setView(VZ, pan.x - (u.x - pan.u.x) / VZ, pan.y - (u.y - pan.u.y) / VZ); e.stopPropagation(); }
     }
@@ -3092,9 +3106,9 @@ function tutShow() {
 function tutHand() {   // the pointing hand: on the target button, or on the map spot to tap
   const st = TUT[tut.i], h = $("tutHand"); let x = null, y = null; h.className = "tut-hand" + (st.hand ? " " + st.hand : "");
   const sp = st.spot && st.spot(), sc0 = st.scr && st.scr();
-  if (sc0) { const r = cv.getBoundingClientRect(); x = r.left + sc0.x * r.width / W; y = r.top + sc0.y * r.height / VH(); } else
-  if (sp && MAP && VZ > 1) { const sx = (sp.x - VX) * VZ, sy = (sp.y - VY) * VZ; if (sx < 30 || sx > W - 30 || sy < 30 || sy > VH() - 30) setView(VZ, sp.x - W / (2 * VZ), sp.y - VH() / (2 * VZ)); }   // bring the spot into view
-  if (sp) { const r = cv.getBoundingClientRect(); x = r.left + (sp.x - VX) * VZ * r.width / W; y = r.top + (sp.y - VY) * VZ * r.height / VH(); if (x < r.left || x > r.right || y < r.top || y > r.bottom) x = null; }
+  if (sc0) { const r = cv.getBoundingClientRect(); x = r.left + sc0.x * r.width / W; y = r.top + sc0.y * r.height / VSH(); } else
+  if (sp && canPan()) { const sx = (sp.x - VX) * VZ, sy = (sp.y - VY) * VZ; if (sx < 30 || sx > W - 30 || sy < 30 || sy > VSH() - 30) setView(VZ, sp.x - W / (2 * VZ), sp.y - VSH() / (2 * VZ)); }   // bring the spot into view
+  if (sp) { const r = cv.getBoundingClientRect(); x = r.left + (sp.x - VX) * VZ * r.width / W; y = r.top + (sp.y - VY) * VZ * r.height / VSH(); if (x < r.left || x > r.right || y < r.top || y > r.bottom) x = null; }
   else if (st.el !== "cv") { const e0 = $(st.el), e = e0 && (e0.closest(".chip") || e0); if (e && e.offsetParent) { const r = e.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; } }
   h.hidden = x === null; if (x !== null) { h.style.left = x + "px"; h.style.top = y + "px"; }
   const needs = st.act || (st.actIf && sp); $("tutNext").hidden = !!needs && !st.last;
