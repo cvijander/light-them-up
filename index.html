@@ -2309,12 +2309,22 @@ function updateTraffic(dt) {
   }
   traffic = traffic.filter(c => !c.gone);
 }
+// Vehicles in 3D: shadow and wheels on the road, the body stacked up toward the viewer (darker sides), and the roof with its details on top.
+function vehicle3d(x, y, ang, L, Wd, hgt, col, top) {
+  const box = (dx, dy, l, w, r) => { ctx.beginPath(); ctx.roundRect(dx - l, dy - w, l * 2, w * 2, r); };
+  ctx.save(); ctx.translate(x + 2.5, y + 3.5); ctx.rotate(ang); ctx.fillStyle = "rgba(0,0,0,.4)"; box(0, 0, L + 1, Wd + 1, 4); ctx.fill(); ctx.restore();   // shadow
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.fillStyle = "#121318";
+  for (const sx of [-.62, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.roundRect(L * sx - 2.8, sy * (Wd + .7) - 1.8, 5.6, 3.6, 1.3); ctx.fill(); }   // wheels
+  ctx.restore();
+  const dz = hgt / KY, side = shade(col, .58), mid = shade(col, .78);
+  for (let k = 0; k < dz; k += .8) { ctx.save(); ctx.translate(x, y - k); ctx.rotate(ang); ctx.fillStyle = k > dz * .55 ? mid : side; box(0, 0, L, Wd, 3); ctx.fill(); ctx.restore(); }   // body
+  ctx.save(); ctx.translate(x, y - dz); ctx.rotate(ang); top(); ctx.restore();   // roof
+}
 function drawTraffic() {
   const night = S.phase === "night", now = performance.now();
   for (const c of traffic) {
     const L = c.type === "truck" ? 15 : 11, Wd = c.type === "truck" ? 7 : 6;
-    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI));
-    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(1.5, 2.5, L + 2, Wd + 1.5, 0, 0, 6.28); ctx.fill();   // soft shadow
+    vehicle3d(c.x, c.y, c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), L, Wd, c.type === "truck" ? 8 : 5.5, c.col, () => {
     ctx.fillStyle = c.col; ctx.beginPath(); ctx.roundRect(-L, -Wd, L * 2, Wd * 2, 3); ctx.fill();
     if (c.type === "truck") { ctx.fillStyle = "#c9c4b6"; ctx.fillRect(-L, -Wd, L * 1.3, Wd * 2); ctx.fillStyle = "#3d6fc9"; ctx.fillRect(L * .35, -Wd, L * .65, Wd * 2); ctx.fillStyle = "rgba(180,210,240,.7)"; ctx.fillRect(L * .7, -Wd + 1, 3, Wd * 2 - 2); }
     else { ctx.fillStyle = "rgba(20,28,44,.75)"; ctx.fillRect(-4, -Wd + 1, 9, Wd * 2 - 2); ctx.fillStyle = "rgba(180,210,240,.65)"; ctx.fillRect(3, -Wd + 1.5, 3, Wd * 2 - 3); }
@@ -2325,7 +2335,7 @@ function drawTraffic() {
       const brake = c.dark; ctx.fillStyle = brake ? "#ff2a1f" : "#a3201a"; if (brake) { ctx.shadowColor = "#ff2a1f"; ctx.shadowBlur = 8; }
       ctx.fillRect(-L - .5, -Wd + 1, 2, 2.5); ctx.fillRect(-L - .5, Wd - 3.5, 2, 2.5); ctx.shadowBlur = 0;
     }
-    ctx.restore();
+    });
   }
 }
 
@@ -2719,9 +2729,9 @@ function render() {
   }
   for (const c of CARS) {
     if (c.gone || (c.y > boundY())) continue;
-    ctx.save(); ctx.translate(c.x, c.y); if (c.ang != null) ctx.rotate(c.ang); else if (c.v) ctx.rotate(Math.PI / 2);
-    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(-11, -4, 24, 11); ctx.fillStyle = c.col; ctx.fillRect(-12, -6, 24, 12);
-    ctx.fillStyle = "rgba(180,210,240,.55)"; ctx.fillRect(-4, -5, 8, 10); ctx.restore();
+    vehicle3d(c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, 12, 6, 5.5, c.col, () => {   // parked cars
+      ctx.fillStyle = c.col; ctx.beginPath(); ctx.roundRect(-12, -6, 24, 12, 3); ctx.fill();
+      ctx.fillStyle = "rgba(20,28,44,.75)"; ctx.fillRect(-5, -5, 10, 10); ctx.fillStyle = "rgba(180,210,240,.6)"; ctx.fillRect(4, -5, 3, 10); ctx.fillRect(-8, -5, 2.5, 10); });
   }
   for (const t of thieves) {
     const b = Math.sin(t.bob) * 1.1;
@@ -2976,8 +2986,7 @@ function wrapText(t, x, y, maxW, lh) {
 }
 function drawVan(v) {
   const home = v.state === "home", now = performance.now();
-  ctx.save(); ctx.translate(v.x + (home && !MAP ? 14 : 0), v.y); ctx.rotate(home && !MAP ? 0 : v.ang);
-  ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(1.5, 3, 15, 8.5, 0, 0, 6.28); ctx.fill();
+  vehicle3d(v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, 13, 7, 8, S.armor ? "#8b939e" : "#eef0f3", () => {
   ctx.fillStyle = S.armor ? "#8b939e" : "#eef0f3"; ctx.beginPath(); ctx.roundRect(-13, -7, 26, 14, 3); ctx.fill();
   if (S.armor) { ctx.strokeStyle = "#5d6470"; ctx.lineWidth = 1; ctx.strokeRect(-12, -6, 24, 12); ctx.fillStyle = "#5d6470"; for (const x of [-10, -2, 6]) for (const y of [-5, 4]) ctx.fillRect(x, y, 1.5, 1.5); }
   ctx.save(); ctx.beginPath(); ctx.roundRect(-13, -7, 26, 14, 3); ctx.clip();   // diagonal orange stripe
@@ -2989,7 +2998,7 @@ function drawVan(v) {
   if (v.state === "drive" || v.state === "return" || v.state === "work") {   // blue-yellow beacon
     const on = (now / 200 | 0) % 2; ctx.fillStyle = on ? "#3b82f6" : "#facc15"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(5, 0, 2.2, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0;
   }
-  ctx.restore();
+  });
   if (v.state === "work" && v.job) {   // ladder (or the crane basket) raised to the lamp
     const s = v.job.slot; ctx.strokeStyle = S.crane ? "#facc15" : "#c9cfd8"; ctx.lineWidth = 1.4; const dx = s.x - v.x, dy = s.y - v.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * 2.5, ny = dx / l * 2.5;
     ctx.beginPath(); ctx.moveTo(v.x + nx, v.y + ny); ctx.lineTo(s.x + nx, s.y + ny); ctx.moveTo(v.x - nx, v.y - ny); ctx.lineTo(s.x - nx, s.y - ny);
@@ -3059,7 +3068,7 @@ $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
-  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW}), toWorld, cv2scr, scr2cv,
+  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW}), toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }};
 
 
