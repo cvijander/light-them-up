@@ -1,5 +1,11 @@
 Light Them Up
 
 Otvori index.html u Chrome-u (dupli klik) i igra radi bez interneta.
-Ceo kod igre je u index.html (HTML, CSS i JavaScript u jednom fajlu). Otvori ga u VS Code-u da ga vidis.
+Kod igre je podeljen u nekoliko fajlova (svi moraju da stoje zajedno u istom folderu):
+  index.html    - stranica: dugmad, tekst uputstva, prozori
+  styles.css    - izgled (boje, raspored na telefonu i racunaru)
+  i18n.js       - prevodi na engleski, nemacki, spanski i grcki
+  borca-map.js  - prave ulice Borce (podaci iz OpenStreetMap-a)
+  game.js       - pravila igre i crtanje mape
+Kad saljes kod Geminiju na proveru, posalji mu game.js (ili styles.css za izgled).
 U folderu slike su naslovna za Google Play (1024x500 i 2048x1000) i logo.
