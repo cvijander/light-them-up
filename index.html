@@ -864,12 +864,14 @@ function drawBgMap(c) {
   c.setLineDash([12, 8]); c.strokeStyle = "rgba(241,196,83,.35)"; c.lineWidth = 2.5; (MAP.border && MAP.border.length > 4 ? polyPath(c, MAP.border) : c.beginPath()); c.stroke(); c.setLineDash([]);
   for (const b of BLD) {
     const h = b.house != null ? houses[b.house] : null, fac = h && S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r);
-    c.save(); c.translate(3, 4); c.fillStyle = "rgba(0,0,0,.35)"; polyPath(c, b.f); c.fill(); c.restore();
-    c.fillStyle = fac ? "#5b6068" : h ? h.roof : "#3c4049"; polyPath(c, b.f); c.fill();
-    c.save(); polyPath(c, b.f); c.clip(); c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(b.x0, b.y0, (b.x1 - b.x0) / 2, b.y1 - b.y0);
+    const z = h ? BZ(h) : 5, rc = fac ? "#5b6068" : h ? h.roof : "#3c4049";
+    c.fillStyle = "rgba(0,0,0,.35)"; for (let k = 0; k <= 1; k += .5) { c.save(); c.translate(2 + z * .9 * k, 2 + z * .6 * k); polyPath(c, b.f); c.fill(); c.restore(); }   // shadow down-right
+    c.fillStyle = shade(rc, .6); for (let k = 0; k < z; k += 1.5) { c.save(); c.translate(0, -k); polyPath(c, b.f); c.fill(); c.restore(); }   // walls: the outline stacked up
+    c.save(); c.translate(0, -z); c.fillStyle = rc; polyPath(c, b.f); c.fill();
+    polyPath(c, b.f); c.clip(); c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(b.x0, b.y0, (b.x1 - b.x0) / 2, b.y1 - b.y0);
     if (fac) { c.fillStyle = "#6e747d"; for (let x = b.x0 + 3; x < b.x1 - 4; x += 8) c.fillRect(x, b.y0 + 3, 5, b.y1 - b.y0 - 6); }
     else if (h) { c.strokeStyle = "rgba(0,0,0,.3)"; c.lineWidth = 1; c.beginPath(); if (b.x1 - b.x0 > b.y1 - b.y0) { c.moveTo(b.x0, (b.y0 + b.y1) / 2); c.lineTo(b.x1, (b.y0 + b.y1) / 2); } else { c.moveTo((b.x0 + b.x1) / 2, b.y0); c.lineTo((b.x0 + b.x1) / 2, b.y1); } c.stroke(); }
-    c.restore();
+    c.restore(); c.save(); c.translate(0, -z); c.strokeStyle = "rgba(255,255,255,.1)"; c.lineWidth = .8; polyPath(c, b.f); c.stroke(); c.restore();
   }
   // street names along the longest straight piece of each street
   c.font = "600 12px Barlow, sans-serif"; c.textAlign = "center"; const done = new Set();
@@ -881,11 +883,13 @@ function drawBgMap(c) {
   }
   // generator and service depot (same look as the invented quarter, moved to a free lot)
   c.save(); c.translate(GOFF.x, GOFF.y);
+  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5);
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177); c.restore();
   c.save(); c.translate(DEPR.x - 548, DEPR.y - 104);
+  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6);
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
   for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(552, 112 + i * 30); c.lineTo(610, 112 + i * 30); c.stroke(); }
@@ -1018,6 +1022,9 @@ function resize() {
 }
 new ResizeObserver(resize).observe(cv);
 const VSH = () => W * cssH / cssW;
+// A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
+const BZ = h => !h ? 6 : h.fac ? 12 : h.plot ? 7 : h.poly ? (h.w * h.h > 1400 ? 11 : 7) : 10;
+const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / cssW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
 const ZMAX = 3.5, zMin = () => Math.min(1, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
 const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
@@ -1074,20 +1081,26 @@ function drawBg() {
   for (const h of houses) {
     if (h.fac && !S.zInd) continue;
     const fac = S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r);
-    c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(h.x + 3, h.y + 4, h.w, h.h);
-    c.fillStyle = fac ? "#5b6068" : h.roof; c.fillRect(h.x, h.y, h.w, h.h);
-    if (fac) { c.fillStyle = "#6e747d"; for (let x = h.x + 3; x < h.x + h.w - 4; x += 8) c.fillRect(x, h.y + 3, 5, h.h - 6); c.fillStyle = "#7a3a2a"; c.fillRect(h.x + h.w - 9, h.y + 3, 6, 6); }
+    const z = BZ(h), rc = fac ? "#5b6068" : h.roof, ry = h.y - z;   // ry: top of the raised roof
+    c.fillStyle = "rgba(0,0,0,.38)"; c.beginPath(); c.moveTo(h.x + h.w, ry + 2); c.lineTo(h.x + h.w + z * 1.1, ry + z * .9 + 2); c.lineTo(h.x + h.w + z * 1.1, h.y + h.h + z * .6); c.lineTo(h.x + z * .6, h.y + h.h + z * .6); c.lineTo(h.x, h.y + h.h); c.closePath(); c.fill();   // shadow falls down-right
+    c.fillStyle = shade(rc, .62); c.fillRect(h.x, ry + h.h, h.w, z);   // front wall
+    c.fillStyle = "rgba(0,0,0,.25)"; c.fillRect(h.x, ry + h.h, h.w, 1);
+    if (!fac) { c.fillStyle = "rgba(20,24,34,.75)"; for (let x = h.x + 4; x < h.x + h.w - 4; x += 9) c.fillRect(x, ry + h.h + 2, 4, Math.max(2, z - 4)); }   // dark windows; lit ones come at night
+    c.fillStyle = rc; c.fillRect(h.x, ry, h.w, h.h);
+    if (fac) { c.fillStyle = "#6e747d"; for (let x = h.x + 3; x < h.x + h.w - 4; x += 8) c.fillRect(x, ry + 3, 5, h.h - 6); c.fillStyle = "#7a3a2a"; c.fillRect(h.x + h.w - 9, ry + 3, 6, 6); }
     c.strokeStyle = "rgba(0,0,0,.35)"; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(h.x + h.w/2, h.y); c.lineTo(h.x + h.w/2, h.y + h.h); c.stroke();
-    if (h.plot) { c.strokeStyle = "rgba(0,0,0,.18)"; for (let yy = h.y + 5; yy < h.y + h.h; yy += 5) { c.beginPath(); c.moveTo(h.x, yy); c.lineTo(h.x + h.w, yy); c.stroke(); } }
-    c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(h.x, h.y, h.w/2, h.h);
+    c.beginPath(); c.moveTo(h.x + h.w/2, ry); c.lineTo(h.x + h.w/2, ry + h.h); c.stroke();
+    if (h.plot) { c.strokeStyle = "rgba(0,0,0,.18)"; for (let yy = ry + 5; yy < ry + h.h; yy += 5) { c.beginPath(); c.moveTo(h.x, yy); c.lineTo(h.x + h.w, yy); c.stroke(); } }
+    c.fillStyle = "rgba(255,255,255,.08)"; c.fillRect(h.x, ry, h.w/2, h.h); c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(h.x, ry, h.w, 1.2);
   }
   // generator
+  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5);
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177);
   // depot
+  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6);
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
   for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(552, 112 + i * 30); c.lineTo(610, 112 + i * 30); c.stroke(); }
@@ -2665,6 +2678,7 @@ function render() {
   for (const s of slots) {
     if (!avail(s)) continue;
     if (!s.lamp) { ctx.strokeStyle = s.zone === "park" ? "rgba(255,200,130,.5)" : "rgba(200,210,230,.28)"; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); continue; }
+    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x, s.y + 9); ctx.lineTo(s.x + 9, s.y + 15); ctx.stroke();   // post shadow on the ground
     ctx.strokeStyle = "#5a606c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y + 9); ctx.stroke();
     ctx.fillStyle = "#4a4f5c"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, 6.28); ctx.fill();
   }
@@ -2731,8 +2745,8 @@ function render() {
   drawWeather();
   if (S.heat) { ctx.font = "700 10px Barlow, sans-serif"; ctx.textAlign = "center";
     for (const h of houses) { if (!hOn(h)) continue; const v = h.sat;
-      ctx.fillStyle = `hsla(${Math.round(v * 120)},85%,50%,.62)`; if (h.poly) { polyPath(ctx, h.poly); ctx.fill(); } else ctx.fillRect(h.x, h.y, h.w, h.h);
-      ctx.fillStyle = "#0b1120"; ctx.fillText(Math.round(v * 100) + "%", h.cx, h.cy + 3.5); } }
+      const z = BZ(h); ctx.fillStyle = `hsla(${Math.round(v * 120)},85%,50%,.62)`; if (h.poly) { ctx.save(); ctx.translate(0, -z); polyPath(ctx, h.poly); ctx.fill(); ctx.restore(); } else ctx.fillRect(h.x, h.y - z, h.w, h.h);
+      ctx.fillStyle = "#0b1120"; ctx.fillText(Math.round(v * 100) + "%", h.cx, h.cy - z + 3.5); } }
 
   if (MAP) drawLandmarks();
   drawGen();
@@ -2740,14 +2754,16 @@ function render() {
   // windows and satisfaction bars
   for (const h of houses) {
     if (!hOn(h)) continue;
+    const z = BZ(h), ry = h.y - z;
     [[.25, .28], [.68, .28], [.25, .68], [.68, .68]].forEach((p, i) => {
       if (!h.win[i]) return;
       ctx.fillStyle = h.glow > .05 ? `rgba(255,205,110,${.25 + .7 * h.glow})` : S.phase === "day" ? "rgba(150,180,210,.5)" : "rgba(40,50,80,.5)";
-      ctx.fillRect(h.x + h.w * p[0] - 2.5, h.y + h.h * p[1] - 3, 5, 6);
+      ctx.fillRect(h.x + h.w * p[0] - 2.5, ry + h.h * p[1] - 3, 5, 6);
+      if (h.glow > .05 && !h.poly && !h.fac && 8 + 9 * i < h.w) ctx.fillRect(h.x + 4 + 9 * i, ry + h.h + 2, 4, Math.max(2, z - 4));   // the same light in the front wall
     });
     if (h.lit || (S.phase === "day" && h.sat > .02)) {
-      ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(h.x + 3, h.y + h.h - 6, h.w - 6, 4);
-      ctx.fillStyle = h.sat > .6 ? "#7ed39a" : h.sat > .3 ? "#f1c453" : "#ff9d8f"; ctx.fillRect(h.x + 3.5, h.y + h.h - 5.5, (h.w - 7) * h.sat, 3);
+      ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(h.x + 3, ry + h.h - 6, h.w - 6, 4);
+      ctx.fillStyle = h.sat > .6 ? "#7ed39a" : h.sat > .3 ? "#f1c453" : "#ff9d8f"; ctx.fillRect(h.x + 3.5, ry + h.h - 5.5, (h.w - 7) * h.sat, 3);
     }
   }
   for (const s of slots) {
@@ -2862,9 +2878,9 @@ function render() {
   ctx.globalAlpha = 1;
   if (S.mission && S.mission.type === "house" && S.phase === "night") { const h = houses[S.mission.house];
     if (h) { const ok = !S.mission.fail, pu = .6 + .4 * Math.sin(performance.now() / 250);
-      ctx.strokeStyle = ok ? `rgba(126,211,154,${pu})` : "rgba(255,107,91,.8)"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.strokeRect(h.x - 4, h.y - 4, h.w + 8, h.h + 8); ctx.setLineDash([]);
+      ctx.strokeStyle = ok ? `rgba(126,211,154,${pu})` : "rgba(255,107,91,.8)"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.strokeRect(h.x - 4, h.y - BZ(h) - 4, h.w + 8, h.h + BZ(h) + 8); ctx.setLineDash([]);
       ctx.font = "bold 12px system-ui"; ctx.textAlign = "center"; const tx = ok ? Tx("ČUVAJ") : "OBIJENA"; const w = ctx.measureText(tx).width + 10;
-      ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(h.cx - w / 2, h.y - 22, w, 16); ctx.fillStyle = ok ? "#7ed39a" : "#ff6b5b"; ctx.fillText(tx, h.cx, h.y - 10); } }
+      ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(h.cx - w / 2, h.y - BZ(h) - 22, w, 16); ctx.fillStyle = ok ? "#7ed39a" : "#ff6b5b"; ctx.fillText(tx, h.cx, h.y - BZ(h) - 10); } }
   for (const t of thieves) if (t.rep > 0) {   // residents reported this thief
     const pu = (performance.now() / 200 | 0) % 2, by = boundY(), ex = clamp(t.x, VX + 16 / VZ, VX + (W - 16) / VZ), ey = clamp(t.y, VY + 16 / VZ, Math.min(by, VY + VSH() / VZ) - 16 / VZ);
     ctx.strokeStyle = pu ? "#ff6b5b" : "#ffd84a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, 13, 0, 6.28); ctx.stroke();
