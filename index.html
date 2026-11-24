@@ -127,8 +127,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
 .fab b{display:block;font-family:var(--display);font-size:15px;text-transform:uppercase}
 .fab span{font-size:11.5px;color:var(--muted)}
 .fab.left{right:auto;left:8px;color:var(--warn);border-color:#6a5a2a}
-.actions{display:flex;gap:6px;align-items:center;min-height:40px}
-.actions .msg{flex:1 1 auto;min-width:0}
+.actions{display:flex;gap:6px;align-items:center;min-height:44px}   /* same height as the place bar that replaces it, so the map does not resize */
+.actions .msg{flex:1 1 auto;min-width:0;height:36px;min-height:0;line-height:18px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;align-self:center}   /* fixed height: a longer tip must not resize the map (that froze the game for a moment) */
 .gang{display:grid;grid-template-columns:auto 36px;gap:3px 6px;align-items:center;font-size:12px;font-weight:600;line-height:1.1;padding:4px 8px;border:1px solid var(--line);border-radius:10px;background:var(--panel);flex:0 0 auto;white-space:nowrap;color:#ff9d8f}
 .gang #gangR{color:#f1a053}
 .gb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
@@ -250,7 +250,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
   .stage{width:auto;min-width:0;aspect-ratio:auto;margin:0}
   .zoom{bottom:8px;right:6px;gap:6px} .zoom button{width:40px;height:40px;font-size:22px;background:rgba(8,10,20,.6)} .zoom #zFit{font-size:18px}
   .msg{min-height:17px;font-size:13px;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .actions .msg{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px;line-height:16px;text-align:left}
+  .actions .msg{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px;line-height:16px;height:32px;text-align:left}
   .side{flex:0 0 auto;gap:8px}
   .sec-lamps h2,.notool,.sec-ups,.rules,.info,.foot{display:none}
   .bar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px 3px}
@@ -1059,11 +1059,12 @@ const VT = c => { const k = sc * VZ; c.setTransform(k * B[0], k * B[1], k * B[2]
 function resize() {
   cssW = Math.max(1, cv.offsetWidth); cssH = Math.max(1, cv.offsetHeight);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = dark.width = bg.width = Math.max(1, Math.round(cssW * dpr));
-  cv.height = dark.height = bg.height = Math.max(1, Math.round(cssH * dpr));
+  cv.width = dark.width = Math.max(1, Math.round(cssW * dpr));
+  cv.height = dark.height = Math.max(1, Math.round(cssH * dpr));
+  bg.width = Math.round(cv.width * (1 + 2 * BGM)); bg.height = Math.round(cv.height * (1 + 2 * BGM));   // the map picture has a margin, so moving the map needs no redraw
   sc = cv.width / pbox().w; fixView(); drawBg();
 }
-new ResizeObserver(resize).observe(cv);
+let rsP = false; new ResizeObserver(() => { if (rsP) return; rsP = true; requestAnimationFrame(() => { rsP = false; if (cv.offsetWidth !== cssW || cv.offsetHeight !== cssH) resize(); }); }).observe(cv);   // at most once a frame, only for a real size change
 const VSH = () => pbox().w * cssH / cssW;   // projected units visible top to bottom at VZ = 1
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
 const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) * (ISO ? 1.5 : 1);   // building height, screen units: walls stand up toward the viewer
@@ -1078,8 +1079,10 @@ const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, s
 function fixView() { const P = pbox(); VZ = clamp(VZ, zMin(), ZMAX); VX = P.x0 + fitV(VX - P.x0, P.w, P.w / VZ); VY = P.y0 + fitV(VY - P.y0, P.h, VSH() / VZ); }
 const canPan = () => { const P = pbox(); return P.w / VZ < P.w - .5 || VSH() / VZ < P.h - .5; };
 
+const BGM = .3;   // extra map picture around the screen, on each side (part of the screen size)
 function drawBg() {
   const c = bctx; c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#0c120e"; c.fillRect(0, 0, bg.width, bg.height); VT(c); bgV = {z:VZ, x:VX, y:VY};
+  { const m = c.getTransform(); m.e += cv.width * BGM; m.f += cv.height * BGM; c.setTransform(m); }
   if (pbox().w / VZ > pbox().w + 1 || VSH() / VZ > pbox().h + 1) {   // zoomed out past the map: dark fields and a few far-off roads around the town
     c.fillStyle = "#16201a"; for (let i = -6; i < 12; i++) for (let j = -4; j < 9; j++) if ((i * 7 + j * 13) % 5) c.fillRect(i * 140 + 8, j * 150 + 8, 124, 134);
     c.fillStyle = "#1a1f26"; for (const y of [120, 545]) { c.fillRect(-2000, y - 9, 2000, 18); c.fillRect(W, y - 9, 2000, 18); }
@@ -2786,7 +2789,9 @@ function drawGen0() {
 }
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#05070f"; ctx.fillRect(0, 0, cv.width, cv.height);
-  { const k = VZ / bgV.z; ctx.setTransform(k, 0, 0, k, (bgV.x - VX) * sc * VZ, (bgV.y - VY) * sc * VZ); ctx.drawImage(bg, 0, 0); }   // stretched for a moment while zooming, redrawn sharp right after
+  { const k = VZ / bgV.z, ox = (bgV.x - VX) * sc * VZ - cv.width * BGM * k, oy = (bgV.y - VY) * sc * VZ - cv.height * BGM * k;   // copy only the part of the map picture that is on the screen
+    const sx = Math.max(0, -ox / k), sy = Math.max(0, -oy / k), sw = Math.min(bg.width - sx, cv.width / k + 1), sh = Math.min(bg.height - sy, cv.height / k + 1);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); if (sw > 0 && sh > 0) ctx.drawImage(bg, sx, sy, sw, sh, ox + sx * k, oy + sy * k, sw * k, sh * k); }   // stretched for a moment while zooming, redrawn sharp right after
   VT(ctx);
   for (const s of slots) {
     if (!avail(s)) continue;
@@ -3165,7 +3170,14 @@ function setView(z, x, y) {
   try { localStorage.setItem(ZKEY, VZ.toFixed(2)); } catch (e) {}
 }
 let bgT = null, bgLast = 0;
-function bgLater() { const now = performance.now(); if (now - bgLast > 120) { bgLast = now; drawBg(); } clearTimeout(bgT); bgT = setTimeout(() => { bgLast = performance.now(); drawBg(); }, 130); }
+function bgLater() {   // moving: redraw only when the margin runs out; zooming: stretch the old picture, redraw sharp when the fingers stop
+  const zoomed = Math.abs(VZ / bgV.z - 1) > .002, dx = (VX - bgV.x) * sc * VZ, dy = (VY - bgV.y) * sc * VZ;
+  const out = Math.abs(dx) > cv.width * BGM * .92 || Math.abs(dy) > cv.height * BGM * .92;
+  clearTimeout(bgT);
+  if (!zoomed && !out) return;
+  if (out && !zoomed) { bgLast = performance.now(); drawBg(); return; }
+  bgT = setTimeout(() => { bgLast = performance.now(); drawBg(); }, 140);
+}
 function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = clamp(z, zMin(), ZMAX); setView(nz, wx - ux / nz, wy - uy / nz); }
 {
   $("zoomBox").hidden = false;
