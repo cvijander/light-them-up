@@ -721,7 +721,7 @@ function routeOpen(r) {
 const routesNow = () => ROUTES.filter(r => !r.plot || S.unlocked);
 function lampAlpha(L) { return L.life < .15 ? (Math.random() < .12 ? .25 : .85) : 1; }
 function msg(t, hot) { const el = document.getElementById("msg"); el.textContent = t; el.classList.toggle("hot", !!hot); S.msgT = 5; }
-function banner(title, sub) { S.banner = {title, sub, t:0}; msg(title + " " + sub); }
+function banner(title, sub) { S.banner = {title, sub, t0:performance.now()}; msg(title + " " + sub); }   // a short card at the top of the map: 2.5 to 4.5 s (by text length), a tap closes it
 function float(x, y, text, col = "#f1c453", big = false) { floats.push({x, y, text, col, t:0, big}); }
 function burst(x, y, col, n, sp = 80) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = rnd(.3, 1) * sp; parts.push({x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, t:0, life:rnd(.4, .9), col, sz:rnd(1, 2.6)}); } }
 let coverKey = "";
@@ -1685,9 +1685,9 @@ function step(dt) {
       } else banner(Tx`Pada noć ${S.night}.`, S.gang.gone ? Tx`Banda se odselila. Nova stiže za ${S.gang.back - S.night} noć${S.gang.back - S.night === 1 ? "" : "i"}. Pazi na lopove!` : S.night === 2 ? Tx("Pazi, stižu prvi huligani! Dolaze iz baze na levoj ivici, crvenim rutama.") : S.reopened ? Tx("Neki zatvoreni delovi su se opet otvorili za bandu.") : Tx("Lampe svetle, banda vreba."));
       S.reopened = 0;
       S.tariff = S.night >= 2 && Math.random() < .25 ? TARIFF : 1;
-      if (S.tariff > 1) S.banner.sub += Tx(" Večeras je skupa tarifa struje (+40%). Ugasi višak ili pređi na štedljive sijalice.");
+      if (S.tariff > 1) S.banner.sub += " " + Tx("Skupa struja +40%") + ".";
       S.weather = S.night >= 3 ? (Math.random() < .2 ? "fog" : Math.random() < .2 ? "storm" : "") : ""; S.stormT = rnd(6, 10);
-      if (S.weather) { S.banner.sub += S.weather === "fog" ? Tx(" Gusta magla: lampe svetle 25% kraće, a lopove je teže uočiti.") : Tx(" Oluja! Stare i oštećene lampe mogu da izgore od kratkog spoja."); if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } }
+      if (S.weather) { S.banner.sub += " " + (S.weather === "fog" ? Tx("Magla: domet −25%") : Tx("Oluja: pazi na stare lampe")) + "."; if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } }
       S.mission = newMission(); if (S.mission) { S.banner.sub += " " + misText(S.mission); S.msgT = 0; }
       S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0;
       if (S.big) {
@@ -2447,11 +2447,10 @@ function render() {
   for (const p of parts) { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, p.sz, p.sz); }
   ctx.globalAlpha = 1;
 
-  for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses
-    ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
-    uprightAt(ctx, lx, ly, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
   // labels: life % and mood face
   ctx.textAlign = "center"; ctx.font = "600 11px Barlow, sans-serif";
+  // Badges never overlap: problem lamps first, then the weakest. Zoomed far out, only lamps that need you get a badge.
+  const far = pxPerU() < 1.15, keep = S.sel || S.pending, cand = [];
   for (const s of slots) {
     if (!avail(s)) continue;
     if (s.job) { const pulse = 7 + Math.sin(performance.now() / 160) * 2; ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(s.x, s.y, pulse + 3, 0, 6.28); ctx.stroke(); }
@@ -2462,12 +2461,24 @@ function render() {
     else if (L.state === "burnt") { txt = "0%"; col = "#ff6b5b"; }
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
     else { txt = pct + "%"; col = pct > 50 ? "#9fe0b3" : pct > 20 ? "#f1c453" : "#ff6b5b"; }
-    const ty = s.y - 11 - (vans.some(v => Math.abs(v.x - s.x) < 40 && Math.abs(v.y - s.y) < 40) ? (ISO ? 26 : 20) : 0), tw = ctx.measureText(txt).width + 8;   // a van at the lamp stays visible under the badge
-    uprightAt(ctx, s.x, s.y, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(s.x - tw / 2 - 7, ty - 10, tw + 14, 13, 6.5); ctx.fill();
-      ctx.fillStyle = col; ctx.fillText(txt, s.x - 7, ty);
-      face(s.x + tw / 2, ty - 3.5, L.mood ?? moodOf(s, L.m)[0]); });
     if (L.state === "ok" && L.powered) { ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(s.x - 9, s.y + 7, 18, 2.5); ctx.fillStyle = col; ctx.fillRect(s.x - 9, s.y + 7, 18 * L.life, 2.5); }
+    const mood = L.mood ?? moodOf(s, L.m)[0], bad = L.state !== "ok" || !L.powered || pct <= 20 || mood < 0;
+    if (far && s !== keep) { if (!bad || !L.powered) continue;   // far out: no power is already on the top bar
+      if (L.state === "broken") txt = "✕"; }   // and short badges
+    cand.push({s, txt, col, mood:far && mood >= 0 && s !== keep ? null : mood, pr:(s === keep ? -1e3 : 0) + (bad ? 0 : 500) + pct});
   }
+  cand.sort((a, b) => a.pr - b.pr); const placed = [];
+  for (const {s, txt, col, mood} of cand) {
+    const lift = vans.some(v => Math.abs(v.x - s.x) < 40 && Math.abs(v.y - s.y) < 40) ? (ISO ? 26 : 20) : 0, ty = s.y - 11 - lift, fw = mood == null ? 0 : 7, tw = ctx.measureText(txt).width + 8 - (fw ? 0 : 6);   // a van at the lamp stays visible under the badge
+    const p = proj(s.x, s.y), r = {x0:p.x - tw / 2 - 2 - fw, x1:p.x + tw / 2 + 6 + fw, y0:p.y - 23 - lift, y1:p.y - 6 - lift};
+    if (placed.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) continue; placed.push(r);
+    uprightAt(ctx, s.x, s.y, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(s.x - tw / 2 - fw, ty - 10, tw + 2 * fw, 13, 6.5); ctx.fill();
+      ctx.fillStyle = col; ctx.fillText(txt, s.x - fw, ty);
+      if (mood != null) face(s.x + tw / 2, ty - 3.5, mood); });
+  }
+  for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses and the badges, readable when zoomed out
+    ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
+    uprightAt(ctx, lx, ly, () => { const zf = Math.max(1, 1.1 / pxPerU()); ctx.translate(lx, ly); ctx.scale(zf, zf); ctx.translate(-lx, -ly); ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
   // radar preview
   const hov = S.hover && slotAt(S.hover, hitR());
   const target = S.tool ? S.pending || hov : hov || S.sel;
@@ -2515,6 +2526,7 @@ function render() {
   const rl = [gl, hl, wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : ""].filter(Boolean);
   const lw = left.map(([t, c, f]) => ctx.measureText(t).width + 16 + (f ? 16 : 0));   // on a narrow screen the right badges go under the left ones instead of over them
   const ro = rl.some((t, i) => ctx.measureText(t).width + 16 + (i < lw.length ? lw[i] : i === lw.length ? 160 : 0) + 24 > UW) ? ly + 14 - 8 : 0;
+  S.hudB = Math.max(ly + 14, rl.length ? ro + 8 + rl.length * 26 : 0) * UK;   // where the top badges end (map width units), the banner goes under them
   rl.forEach((t, i) => { const w2 = ctx.measureText(t).width + 16; ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(UW - 8 - w2, ro + 8 + i * 26, w2, 22); ctx.fillStyle = i ? "#c9cfdb" : "#f1c453"; ctx.fillText(t, UW - 16, ro + 24 + i * 26); });
   // the gang meter lives under the map (#gang), where it stays readable on any screen
   ctx.textAlign = "left";
@@ -2545,13 +2557,18 @@ function render() {
   if (MAP) { ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "rgba(8,10,20,.7)"; ctx.fillRect(wk - 166, hk - 20, 160, 16); ctx.fillStyle = "#c9cfdb"; ctx.fillText(Tx("© OpenStreetMap saradnici"), wk - 10, hk - 8); ctx.textAlign = "left"; }
   ctx.setTransform(osc * k, 0, 0, osc * k, (ocv.width - W * osc * k) / 2, 0); }   // banners: a box in the middle of the screen, never wider than a phone screen
   if (S.banner) {
-    const b = S.banner; b.t += 1 / 60; const a = Math.min(1, b.t * 3, (5 - b.t) * 2);
-    if (b.t > 5) S.banner = null; else {
-      const y0 = Math.round(Math.min(400, W * osH / osW / Math.min(1, 640 / osW) / 2 - 70));   // in the middle of the screen, however tall it is
-      ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.fillRect(24, y0, W - 48, 140);
-      ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 2; ctx.strokeRect(24, y0, W - 48, 140);
-      ctx.textAlign = "center"; ctx.fillStyle = "#f1c453"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(b.title, W / 2, y0 + 46);
-      ctx.fillStyle = "#ece6d6"; ctx.font = "500 15px Barlow, sans-serif"; wrapText(b.sub, W / 2, y0 + 74, W - 80, 19); ctx.globalAlpha = 1; ctx.textAlign = "left";
+    const b = S.banner, k = Math.min(1, 640 / osW), t = (performance.now() - b.t0) / 1000;
+    if (b.dur == null) b.dur = clamp(2.2 + (b.title.length + b.sub.length) / 45, 2.5, 4.5);
+    const a = Math.min(1, t * 4, (b.dur - t) * 3);
+    if (t > b.dur) { S.banner = null; S.bannerR = null; } else {
+      const bw = Math.min(W - 32, 520), x0 = (W - bw) / 2, y0 = Math.round((S.hudB || 70) / k + 8);
+      ctx.font = "500 14px Barlow, sans-serif"; const lines = wrapLines(b.sub, bw - 28), h = 44 + lines.length * 18;
+      ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.beginPath(); ctx.roundRect(x0, y0, bw, h, 12); ctx.fill();
+      ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.textAlign = "center"; ctx.fillStyle = "#f1c453"; ctx.font = "700 24px Barlow Condensed, sans-serif"; ctx.fillText(b.title, W / 2, y0 + 30);
+      ctx.fillStyle = "#ece6d6"; ctx.font = "500 14px Barlow, sans-serif"; lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + 50 + i * 18));
+      ctx.globalAlpha = 1; ctx.textAlign = "left";
+      const dpr = ocv.width / osW, m = ctx.getTransform(); S.bannerR = {x:(m.e + x0 * m.a) / dpr, y:(m.f + y0 * m.d) / dpr, w:bw * m.a / dpr, h:h * m.d / dpr};   // css px inside the stage, for tap to close
     }
   }
   ctx = ctx0;
@@ -2588,6 +2605,7 @@ function drawGang() {
   ctx.restore();
   ctx.restore(); ctx.textAlign = "left";
 }
+function wrapLines(t, maxW) { const out = []; let line = ""; for (const w of t.split(" ")) { const test = line ? line + " " + w : w; if (ctx.measureText(test).width > maxW && line) { out.push(line); line = w; } else line = test; } if (line) out.push(line); return out; }
 function wrapText(t, x, y, maxW, lh) {
   const words = t.split(" "); let line = "";
   for (const w of words) { const test = line ? line + " " + w : w; if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, y); y += lh; line = w; } else line = test; }
@@ -2716,6 +2734,10 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
   const nearPending = e => { const pd = S.pending; if (!pd || pd.lamp || pd.job) return false; const p = toWorld(e); return Math.hypot(pd.x - p.x, pd.y - p.y) < hitR() * 1.6; };
   const fire = (type, d) => { replay = true; try { cv.dispatchEvent(new PointerEvent(type, {clientX:d.x, clientY:d.y, pointerId:d.id, pointerType:d.type, isPrimary:true, bubbles:true, cancelable:true})); } finally { replay = false; } };
   const unit = e => { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return {x:c.u / cssW * pw, y:c.v / cssW * pw}; };
+  stage.addEventListener("pointerdown", e => {   // a tap on the banner closes it (and does nothing else); any other tap also closes it
+    if (!S.banner) return; const r = S.bannerR, q = scr2cv(e.clientX, e.clientY); S.banner = null; S.bannerR = null;
+    if (r && q.u >= r.x && q.u <= r.x + r.w && q.v >= r.y && q.v <= r.y + r.h) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
   stage.addEventListener("pointerdown", e => {
     if (e.target !== cv || replay) return;
     pts.set(e.pointerId, unit(e));
