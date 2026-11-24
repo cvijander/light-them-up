@@ -2293,7 +2293,7 @@ function step(dt) {
 
 
 // ---------- Live traffic: cars drive the streets, use high beams in the dark, honk at hooligans ----------
-const CAR_COLS = ["#c94f3d", "#3d6fc9", "#d9d9d9", "#3f8f55", "#6b4fa8"];
+const CAR_COLS = ["#b8bec7", "#2f4a78", "#7a2e3a", "#4a4f58", "#8c8f94"];   // muted, so the lamps and the van stand out
 const CAR_TYPES = ["hatch", "hatch", "hatch", "taxi", "truck", "police"];
 function spawnCar() {
   if (traffic.length >= MAX_CARS) return;
@@ -2328,34 +2328,78 @@ function updateTraffic(dt) {
   }
   traffic = traffic.filter(c => !c.gone);
 }
-// Vehicles in 3D: shadow and wheels on the road, the body stacked up toward the viewer (darker sides), and the roof with its details on top.
-function vehicle3d(x, y, ang, L, Wd, hgt, col, top) {
-  const box = (dx, dy, l, w, r) => { ctx.beginPath(); ctx.roundRect(dx - l, dy - w, l * 2, w * 2, r); };
-  ctx.save(); ctx.translate(x + SHV.x * 4, y + SHV.y * 4); ctx.rotate(ang); ctx.fillStyle = "rgba(0,0,0,.4)"; box(0, 0, L + 1, Wd + 1, 4); ctx.fill(); ctx.restore();   // shadow
-  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.fillStyle = "#121318";
-  for (const sx of [-.62, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.roundRect(L * sx - 2.8, sy * (Wd + .7) - 1.8, 5.6, 3.6, 1.3); ctx.fill(); }   // wheels
-  ctx.restore();
-  const dz = hgt * (ISO ? 1.4 : 1), side = shade(col, .5), mid = shade(col, .72);
-  for (let k = 0; k < dz; k += .8) { ctx.save(); ctx.translate(x + UPV.x * k, y + UPV.y * k); ctx.rotate(ang); ctx.fillStyle = k > dz * .55 ? mid : side; box(0, 0, L, Wd, 3); ctx.fill(); ctx.restore(); }   // body
-  ctx.save(); ctx.translate(x + UPV.x * dz, y + UPV.y * dz); ctx.rotate(ang); top(); ctx.restore();   // roof
-}
-function drawTraffic() {
-  const night = S.phase === "night", now = performance.now();
-  for (const c of traffic) {
-    const L = c.type === "truck" ? 15 : 11, Wd = c.type === "truck" ? 7 : 6;
-    vehicle3d(c.x, c.y, c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), L, Wd, c.type === "truck" ? 8 : 5.5, c.col, () => {
-    ctx.fillStyle = c.col; ctx.beginPath(); ctx.roundRect(-L, -Wd, L * 2, Wd * 2, 3); ctx.fill();
-    if (c.type === "truck") { ctx.fillStyle = "#c9c4b6"; ctx.fillRect(-L, -Wd, L * 1.3, Wd * 2); ctx.fillStyle = "#3d6fc9"; ctx.fillRect(L * .35, -Wd, L * .65, Wd * 2); ctx.fillStyle = "rgba(180,210,240,.7)"; ctx.fillRect(L * .7, -Wd + 1, 3, Wd * 2 - 2); }
-    else { ctx.fillStyle = "rgba(20,28,44,.75)"; ctx.fillRect(-4, -Wd + 1, 9, Wd * 2 - 2); ctx.fillStyle = "rgba(180,210,240,.65)"; ctx.fillRect(3, -Wd + 1.5, 3, Wd * 2 - 3); }
-    if (c.type === "taxi") { ctx.fillStyle = night ? "#fff3b0" : "#2c2f38"; ctx.fillRect(-2, -2.5, 4, 5); }
-    if (c.type === "police") { ctx.fillStyle = "#2b4fb0"; ctx.fillRect(-L, -1.5, L * 2, 3); const on = (now / 220 | 0) % 2; ctx.fillStyle = on ? "#4d8bff" : "#ff4d4d"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10; ctx.fillRect(-1.5, -4, 3, 8); ctx.shadowBlur = 0; }
-    if (night) {
-      ctx.fillStyle = "#fff6d0"; ctx.fillRect(L - 1, -Wd + 1, 2, 2.5); ctx.fillRect(L - 1, Wd - 3.5, 2, 2.5);
-      const brake = c.dark; ctx.fillStyle = brake ? "#ff2a1f" : "#a3201a"; if (brake) { ctx.shadowColor = "#ff2a1f"; ctx.shadowBlur = 8; }
-      ctx.fillRect(-L - .5, -Wd + 1, 2, 2.5); ctx.fillRect(-L - .5, Wd - 3.5, 2, 2.5); ctx.shadowBlur = 0;
-    }
-    });
+// Vehicles as real little boxes: each part is a box turned along the street. Only the walls that face the viewer are drawn,
+// lit by the same light as the buildings (light from the upper left, shadow down right), so they look right in both views and all 4 directions.
+const nrm = v => { const l = Math.hypot(v.x, v.y) || 1; return {x:v.x / l, y:v.y / l}; };
+const VDN = nrm(unproj(0, 1)), LDN = nrm(unproj(-1, .35));   // on the ground: toward the viewer, toward the light
+const pxPerU = () => sc * VZ / Math.min(2, window.devicePixelRatio || 1);   // css px per projected unit
+function vSize(L) { return Math.min(2.2, Math.max(1, 20 / (2 * L * pxPerU()))); }   // zoomed far out, cars keep a readable size
+function smoothAng(o, a) { if (o.va == null || !isFinite(o.va)) o.va = a; let d = a - o.va; d = Math.atan2(Math.sin(d), Math.cos(d)); o.va += d * Math.min(1, .22); return o.va; }   // turn into a corner, don't snap
+// One box: length a0..a1 along the car, half width w, from height z0 to z1 (screen units). ti = how much the top is pulled in (a rounded cabin).
+// col = body colour; opt.face(i, pts) draws details on a visible wall (i: 0 front, 1 left, 2 rear, 3 right), opt.top(pts) on the roof.
+function vBox(x, y, c, s, a0, a1, w, z0, z1, col, opt = {}) {
+  const ti = opt.ti || 0, tw = opt.tw != null ? opt.tw : ti;
+  const P = (a, b, z) => ({x:x + a * c - b * s + UPV.x * z, y:y + a * s + b * c + UPV.y * z});
+  const lo = [P(a1, -w, z0), P(a1, w, z0), P(a0, w, z0), P(a0, -w, z0)];
+  const hi = [P(a1 - ti, -w + tw, z1), P(a1 - ti, w - tw, z1), P(a0 + (opt.tr != null ? opt.tr : ti), w - tw, z1), P(a0 + (opt.tr != null ? opt.tr : ti), -w + tw, z1)];
+  const N = [{x:c, y:s}, {x:-s, y:c}, {x:-c, y:-s}, {x:s, y:-c}];   // front, left(+b), rear, right(-b)
+  const E = [[0, 1], [1, 2], [2, 3], [3, 0]];
+  for (let i = 0; i < 4; i++) {
+    const n = N[i], vis = n.x * VDN.x + n.y * VDN.y; if (vis <= .02) continue;
+    const lit = n.x * LDN.x + n.y * LDN.y, [p, q] = E[i], pts = [lo[p], lo[q], hi[q], hi[p]];
+    ctx.fillStyle = shade(col, .62 + .26 * lit); ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.closePath(); ctx.fill();
+    if (opt.face) opt.face(i, pts, vis);
   }
+  ctx.fillStyle = opt.roof || shade(col, 1.12); ctx.beginPath(); ctx.moveTo(hi[0].x, hi[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(hi[k].x, hi[k].y); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = .7; ctx.stroke();   // light top edge: shows the shape on a dark street
+  if (opt.top) opt.top(hi, P);
+}
+const quadAt = (pts, u0, u1, v0, v1) => { const L = (A, B, t) => ({x:A.x + (B.x - A.x) * t, y:A.y + (B.y - A.y) * t});   // a part of a wall: u along the bottom edge, v up the wall
+  const b0 = L(pts[0], pts[1], u0), b1 = L(pts[0], pts[1], u1), t0 = L(pts[3], pts[2], u0), t1 = L(pts[3], pts[2], u1);
+  return [L(b0, t0, v0), L(b1, t1, v0), L(b1, t1, v1), L(b0, t0, v1)]; };
+const fillQ = (q, f) => { ctx.fillStyle = f; ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(q[k].x, q[k].y); ctx.closePath(); ctx.fill(); };
+// A whole vehicle. kind: car, taxi, police, truck, van. o = the object (for smooth turning), lights: "off" | "on" | "brake".
+function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
+  const big = kind === "van" || kind === "truck", L0 = kind === "truck" ? 15 : kind === "van" ? 14 : 10, W0 = kind === "truck" ? 6.5 : kind === "van" ? 7 : 5;
+  const k = vSize(L0), L = L0 * k, Wd = W0 * k, a = o ? smoothAng(o, ang) : ang, c = Math.cos(a), s = Math.sin(a), Z = (ISO ? 1.35 : 1) * k;
+  // layer 1: soft shadow on the road + wheels
+  ctx.save(); ctx.translate(x + SHV.x * 3 * Z, y + SHV.y * 3 * Z); ctx.rotate(a); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.roundRect(-L - 1.5, -Wd - 1.5, 2 * L + 3, 2 * Wd + 3, 4 * k); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = "#0d0e12";
+  for (const sx of [-.6, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(L * sx, sy * (Wd - .3 * k), 2.6 * k, 1.5 * k, 0, 0, 6.28); ctx.fill(); }
+  ctx.restore();
+  const night = lights !== "off", glass = "#1d2738", glassHi = "#5d7896";
+  const wheels = (pts, us = [.2, .8]) => { for (const u of us) { const p = quadAt(pts, u, u, .12, .12)[0], r = 2.3 * Z; uprightAt(ctx, p.x, p.y, () => { ctx.fillStyle = "#101116"; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.28); ctx.fill(); ctx.fillStyle = "#6b7280"; ctx.beginPath(); ctx.arc(p.x, p.y, r * .42, 0, 6.28); ctx.fill(); }); } };   // wheels on the visible sides
+  const lamps = (i, pts, vis) => {   // headlights on the front wall, tail lights on the rear wall
+    if (i === 0) { const f = night ? "#fff6d0" : "#e9e4cf"; if (night) { ctx.shadowColor = "#fff2b0"; ctx.shadowBlur = 8; } fillQ(quadAt(pts, .08, .26, .35, .75), f); fillQ(quadAt(pts, .74, .92, .35, .75), f); ctx.shadowBlur = 0; }
+    if (i === 2) { const f = lights === "brake" ? "#ff2a1f" : night ? "#d3261c" : "#8f1f1a"; if (lights === "brake") { ctx.shadowColor = "#ff2a1f"; ctx.shadowBlur = 8; } fillQ(quadAt(pts, .06, .24, .4, .78), f); fillQ(quadAt(pts, .76, .94, .4, .78), f); ctx.shadowBlur = 0; }
+    if (i === 1 || i === 3) wheels(pts);
+  };
+  if (kind === "truck") {
+    const cargo = () => vBox(x, y, c, s, -L, L * .22, Wd, 1.2 * Z, 10 * Z, "#d9d4c6", {face:(i, pts, v) => { if (i === 2) lamps(i, pts, v); if (i === 1 || i === 3) { fillQ(quadAt(pts, .05, .95, .82, .9), "rgba(0,0,0,.18)"); wheels(pts, [.25, .75]); } }});;
+    const cab = () => vBox(x, y, c, s, L * .3, L, Wd * .95, 1.2 * Z, 7 * Z, "#3d6fc9", {ti:1.6 * k, tr:0, face:(i, pts) => { if (i === 0) { fillQ(quadAt(pts, .1, .9, .58, .96), glass); lamps(i, pts); } else if (i !== 2) { fillQ(quadAt(pts, i === 1 ? .08 : .5, i === 1 ? .5 : .92, .55, .95), glass); wheels(pts, [.5]); } }});   // cab
+    if (c * VDN.x + s * VDN.y > 0) { cargo(); cab(); } else { cab(); cargo(); }   // the nearer part last
+    return;
+  }
+  if (kind === "van") {
+    vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 6 * Z, col, {face:(i, pts, v) => { if (i === 1 || i === 3) { fillQ(quadAt(pts, .08, .92, .5, .78), "#f08a24"); fillQ(quadAt(pts, i === 1 ? .42 : .3, i === 1 ? .7 : .58, .05, .95), "rgba(0,0,0,.12)"); } lamps(i, pts, v); }});   // lower body with the orange stripe and the side door
+    vBox(x, y, c, s, -L, L * .78, Wd, 6 * Z, 10 * Z, col, {ti:0, tr:0, tw:.6 * k, face:(i, pts) => { if (i === 0) fillQ(quadAt(pts, .08, .92, .12, .9), glass); else if (i === 1 || i === 3) fillQ(quadAt(pts, i === 1 ? .72 : .08, i === 1 ? .92 : .28, .18, .85), glass); else fillQ(quadAt(pts, .15, .85, .2, .8), "rgba(0,0,0,.2)"); },
+      top:(hi, P) => extra && extra(P, 10 * Z, L, Wd, k)});   // tall box with dark glass; ladder, beacon, crane on the roof
+    return;
+  }
+  vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 4.6 * Z, col, {ti:.4 * k, face:lamps});   // lower body
+  vBox(x, y, c, s, -L * .55, L * .35, Wd * .92, 4.6 * Z, 7.6 * Z, col, {ti:1.6 * k, tw:.9 * k, roof:shade(col, 1.22),   // cabin: glass all round, light roof
+    face:(i, pts) => { if (i === 1 || i === 3) { fillQ(quadAt(pts, .07, .47, .12, .86), glass); fillQ(quadAt(pts, .53, .93, .12, .86), glass); } else fillQ(quadAt(pts, .06, .94, .1, .88), i === 0 ? glassHi : glass); },   // side windows with a pillar
+    top:(hi) => {
+      const cx = (hi[0].x + hi[2].x) / 2, cy = (hi[0].y + hi[2].y) / 2;
+      if (kind === "taxi") uprightAt(ctx, cx, cy, () => { ctx.fillStyle = night ? "#fff3b0" : "#2c2f38"; if (night) { ctx.shadowColor = "#fff3b0"; ctx.shadowBlur = 8; } ctx.fillRect(cx - 3 * k, cy - 3 * k, 6 * k, 3 * k); ctx.shadowBlur = 0; });
+      if (kind === "police") uprightAt(ctx, cx, cy, () => { const on = (performance.now() / 220 | 0) % 2; ctx.fillStyle = "#2b2f3a"; ctx.fillRect(cx - 4.5 * k, cy - 2.6 * k, 9 * k, 2.6 * k);
+        ctx.shadowBlur = 10; ctx.fillStyle = ctx.shadowColor = on ? "#4d8bff" : "#7a1a1a"; ctx.fillRect(cx - 4.5 * k, cy - 2.6 * k, 4.3 * k, 2.6 * k); ctx.fillStyle = ctx.shadowColor = on ? "#1a2a6a" : "#ff4d4d"; ctx.fillRect(cx + .2 * k, cy - 2.6 * k, 4.3 * k, 2.6 * k); ctx.shadowBlur = 0; });
+    }});
+}
+const CAR_KIND = {hatch:"car", taxi:"taxi", police:"police", truck:"truck"};
+function drawTraffic() {
+  const night = S.phase === "night";
+  for (const c of traffic) drawVehicle(c, c.x, c.y, c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), CAR_KIND[c.type] || "car", c.col, night ? (c.dark ? "brake" : "on") : "off");
 }
 
 // ---------- Pedestrians: worried in the dark, happy under the lamps ----------
@@ -2750,9 +2794,7 @@ function render() {
   });
   for (const c of CARS) {
     if (c.gone || (c.y > boundY())) continue;
-    vehicle3d(c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, 12, 6, 5.5, c.col, () => {   // parked cars
-      ctx.fillStyle = c.col; ctx.beginPath(); ctx.roundRect(-12, -6, 24, 12, 3); ctx.fill();
-      ctx.fillStyle = "rgba(20,28,44,.75)"; ctx.fillRect(-5, -5, 10, 10); ctx.fillStyle = "rgba(180,210,240,.6)"; ctx.fillRect(4, -5, 3, 10); ctx.fillRect(-8, -5, 2.5, 10); });
+    drawVehicle(null, c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, "car", c.col, "off");   // parked cars
   }
   for (const t of thieves) {
     const b = Math.sin(t.bob) * 1.1;
@@ -3012,21 +3054,19 @@ function wrapText(t, x, y, maxW, lh) {
 function drawVan(v) {
   const home = v.state === "home", now = performance.now();
   if ((v.state === "drive" || v.state === "return") && S.phase === "night") {   // two headlight beams on the road ahead
-    ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.ang); const g = ctx.createLinearGradient(12, 0, 52, 0); g.addColorStop(0, "rgba(255,244,210,.45)"); g.addColorStop(1, "rgba(255,244,210,0)"); ctx.fillStyle = g;
+    ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.va != null ? v.va : v.ang); const g = ctx.createLinearGradient(14, 0, 56, 0); g.addColorStop(0, "rgba(255,244,210,.45)"); g.addColorStop(1, "rgba(255,244,210,0)"); ctx.fillStyle = g;
     for (const sy of [-4, 4]) { ctx.beginPath(); ctx.moveTo(12, sy - 1.2); ctx.lineTo(52, sy * 2.6 - 7); ctx.lineTo(52, sy * 2.6 + 7); ctx.lineTo(12, sy + 1.2); ctx.closePath(); ctx.fill(); }
     ctx.restore(); }
-  vehicle3d(v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, 13, 7, 8, S.armor ? "#8b939e" : "#eef0f3", () => {
-  ctx.fillStyle = S.armor ? "#8b939e" : "#eef0f3"; ctx.beginPath(); ctx.roundRect(-13, -7, 26, 14, 3); ctx.fill();
-  if (S.armor) { ctx.strokeStyle = "#5d6470"; ctx.lineWidth = 1; ctx.strokeRect(-12, -6, 24, 12); ctx.fillStyle = "#5d6470"; for (const x of [-10, -2, 6]) for (const y of [-5, 4]) ctx.fillRect(x, y, 1.5, 1.5); }
-  ctx.save(); ctx.beginPath(); ctx.roundRect(-13, -7, 26, 14, 3); ctx.clip();   // diagonal orange stripe
-  ctx.fillStyle = "#f08a24"; ctx.beginPath(); ctx.moveTo(-6, -7); ctx.lineTo(0, -7); ctx.lineTo(-6, 7); ctx.lineTo(-12, 7); ctx.fill(); ctx.restore();
-  ctx.fillStyle = "#3e4c63"; ctx.fillRect(7, -6, 5, 12);   // cab window
-  ctx.strokeStyle = "#9aa3b2"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-10, -3); ctx.lineTo(4, -3); ctx.moveTo(-10, 3); ctx.lineTo(4, 3);
-  for (let x = -9; x <= 3; x += 3) { ctx.moveTo(x, -3); ctx.lineTo(x, 3); } ctx.stroke();   // ladder on the roof
-  if (S.crane) { ctx.fillStyle = "#facc15"; ctx.fillRect(-11, -1.5, 15, 3); ctx.fillStyle = "#0b1120"; ctx.fillRect(-12, -2.5, 3, 5); }   // folded crane boom
-  if (v.state === "drive" || v.state === "return" || v.state === "work") {   // blue-yellow beacon
-    const on = (now / 200 | 0) % 2; ctx.fillStyle = on ? "#3b82f6" : "#facc15"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(5, 0, 2.2, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0;
-  }
+  const busy = v.state === "drive" || v.state === "return" || v.state === "work";
+  drawVehicle(v, v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, "van", S.armor ? "#8b939e" : "#f1efe6", S.phase === "night" && busy ? "on" : "off", (P, z, L, Wd, k) => {   // on the roof: ladder, folded crane, beacon
+    const line = (a0, b0, a1, b1) => { const p = P(a0, b0, z), q = P(a1, b1, z); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); };
+    if (S.armor) { ctx.fillStyle = "#5d6470"; for (const a of [-.7, -.2, .3]) for (const b of [-.7, .7]) { const p = P(L * a, Wd * b, z); ctx.fillRect(p.x - .8, p.y - .8, 1.6, 1.6); } }
+    ctx.strokeStyle = "#8d96a6"; ctx.lineWidth = 1.2 * k; ctx.beginPath(); line(-L * .9, -Wd * .4, L * .35, -Wd * .4); line(-L * .9, Wd * .4, L * .35, Wd * .4);
+    for (let a = -.85; a <= .3; a += .17) line(L * a, -Wd * .4, L * a, Wd * .4); ctx.stroke();
+    if (S.crane) { ctx.strokeStyle = "#facc15"; ctx.lineWidth = 2.6 * k; ctx.beginPath(); line(-L * .8, 0, L * .3, 0); ctx.stroke(); }
+    const b = P(L * .55, 0, z + 1.5 * k);
+    if (busy) uprightAt(ctx, b.x, b.y, () => { const on = (now / 200 | 0) % 2; ctx.fillStyle = "#3a3f4a"; ctx.fillRect(b.x - 3.2 * k, b.y, 6.4 * k, 1.6 * k);
+      ctx.fillStyle = ctx.shadowColor = on ? "#ff8a1f" : "#ffd24a"; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(b.x, b.y - .4 * k, 2.4 * k, Math.PI, 0); ctx.fill(); ctx.shadowBlur = 0; });
   });
   if (v.state === "work" && v.job) {   // ladder (or the crane basket) raised to the lamp
     const s = v.job.slot; ctx.strokeStyle = S.crane ? "#facc15" : "#c9cfd8"; ctx.lineWidth = 1.4; const dx = s.x - v.x, dy = s.y - v.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * 2.5, ny = dx / l * 2.5;
@@ -3098,7 +3138,7 @@ for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
   view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW, PW:pbox().w, ISO}), proj, toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
-  get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }};
+  get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }, get vans() { return vans; }};
 
 
 // ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
