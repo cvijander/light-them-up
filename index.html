@@ -92,7 +92,7 @@ body.tut-on .tool.bl,body.tut-on .grp.g2,body.tut-on #btnRef{visibility:hidden}
 @keyframes tutp{50%{outline-color:rgba(241,196,83,.25)}}
 .zoom{position:absolute;right:8px;bottom:30px;z-index:4;display:flex;flex-direction:column;gap:8px}
 .zoom button{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(8,10,20,.78);color:#ece6d6;font:700 26px/1 Barlow,sans-serif;cursor:pointer}
-.zoom #zFit{font-size:22px}
+.zoom #zFit{font-size:22px} .zoom #zIso{font:700 13px/1 Barlow,sans-serif;letter-spacing:.04em} .zoom #zIso.on{border-color:var(--sodium);color:var(--sodium)}
 .mapsel{margin:4px 0 12px}
 .mapbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .mapb{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:12px;padding:10px 8px;font-family:var(--display);font-size:17px;cursor:pointer}
@@ -315,7 +315,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
     <div class="stage-wrap" id="stageWrap">
       <div class="stage" id="stage">
         <canvas id="cv" aria-label="Mapa kvarta"></canvas><canvas id="cvo" aria-hidden="true"></canvas>
-        <div class="zoom" id="zoomBox" hidden><button type="button" id="zIn" aria-label="Uveličaj">+</button><button type="button" id="zOut" aria-label="Umanji">−</button><button type="button" id="zFit" aria-label="Cela mapa">⤢</button></div>
+        <div class="zoom" id="zoomBox" hidden><button type="button" id="zIn" aria-label="Uveličaj">+</button><button type="button" id="zOut" aria-label="Umanji">−</button><button type="button" id="zFit" aria-label="Cela mapa">⤢</button><button type="button" id="zIso" aria-label="Izometrijski pogled">ISO</button></div>
         <div class="dawn" id="dawn" hidden role="dialog" aria-label="Izveštaj u zoru"><div class="dn-t"></div><div class="dn-rows"></div><ul class="dn-notes"></ul><button class="big" id="dawnOk" type="button">U redu</button></div>
       </div>
     </div>
@@ -787,8 +787,8 @@ function drawLandmarks() {
     if (l.poly && l.poly.length > 4) { ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash(l.st === 2 ? [] : [5, 4]); polyPath(ctx, l.poly); ctx.stroke(); ctx.setLineDash([]); }
     const t1 = l.name.length > 26 ? R.t : l.name, t2 = l.st === 2 ? Tx("zadovoljni ✓") : l.st === 1 ? Tx`traži: ${R.need}` : Tx`noću traži: ${R.need}`;
     ctx.font = "700 11px Barlow, sans-serif"; const w = Math.max(ctx.measureText(t1).width, (ctx.font = "500 10px Barlow, sans-serif", ctx.measureText(t2).width)) + 12, y = l.y - 4;
-    ctx.fillStyle = "rgba(8,10,20,.82)"; ctx.fillRect(l.x - w / 2, y - 13, w, 27); ctx.fillStyle = col; ctx.fillRect(l.x - w / 2, y - 13, 3, 27);
-    ctx.font = "700 11px Barlow, sans-serif"; ctx.fillStyle = "#ece6d6"; ctx.fillText(t1, l.x, y - 1); ctx.font = "500 10px Barlow, sans-serif"; ctx.fillStyle = col; ctx.fillText(t2, l.x, y + 10);
+    uprightAt(ctx, l.x, l.y, () => { ctx.fillStyle = "rgba(8,10,20,.82)"; ctx.fillRect(l.x - w / 2, y - 13, w, 27); ctx.fillStyle = col; ctx.fillRect(l.x - w / 2, y - 13, 3, 27);
+    ctx.font = "700 11px Barlow, sans-serif"; ctx.fillStyle = "#ece6d6"; ctx.fillText(t1, l.x, y - 1); ctx.font = "500 10px Barlow, sans-serif"; ctx.fillStyle = col; ctx.fillText(t2, l.x, y + 10); });
   }
   ctx.restore();
 }
@@ -864,16 +864,17 @@ function drawBgMap(c) {
   c.strokeStyle = "#6b6448"; c.lineWidth = 1.5; c.setLineDash([10, 12]); for (const [cl, , ids] of MAP.roads) if (cl >= 2) line(ids);
   c.setLineDash([3, 4]); c.strokeStyle = "rgba(210,200,170,.3)"; c.lineWidth = 2; for (const f of MAP.foot) { c.beginPath(); c.moveTo(f[0], f[1]); for (let i = 2; i < f.length; i += 2) c.lineTo(f[i], f[i + 1]); c.stroke(); }
   c.setLineDash([12, 8]); c.strokeStyle = "rgba(241,196,83,.35)"; c.lineWidth = 2.5; (MAP.border && MAP.border.length > 4 ? polyPath(c, MAP.border) : c.beginPath()); c.stroke(); c.setLineDash([]);
-  for (const b of BLD) {
+  const bz = b => { const h = b.house != null ? houses[b.house] : null; return h ? BZ(h) : 5 * (ISO ? 1.5 : 1); };
+  c.fillStyle = "rgba(0,0,0,.35)"; for (const b of BLD) { const z = bz(b); for (let k = 0; k <= 1; k += .5) { c.save(); c.translate(SHV.x * z * k, SHV.y * z * k); polyPath(c, b.f); c.fill(); c.restore(); } }   // ground shadows
+  for (const b of ISO ? BLD.slice().sort((a, b2) => proj(a.x1, a.y1).y - proj(b2.x1, b2.y1).y) : BLD) {
     const h = b.house != null ? houses[b.house] : null, fac = h && S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r);
-    const z = h ? BZ(h) : 5, rc = fac ? "#5b6068" : h ? h.roof : "#3c4049";
-    c.fillStyle = "rgba(0,0,0,.35)"; for (let k = 0; k <= 1; k += .5) { c.save(); c.translate(2 + z * .9 * k, 2 + z * .6 * k); polyPath(c, b.f); c.fill(); c.restore(); }   // shadow down-right
-    c.fillStyle = shade(rc, .6); for (let k = 0, ks = Math.max(.4, 1.5 / VZ); k < z; k += ks) { c.save(); c.translate(0, -k); polyPath(c, b.f); c.fill(); c.restore(); }   // walls: the outline stacked up
-    c.save(); c.translate(0, -z); c.fillStyle = rc; polyPath(c, b.f); c.fill();
+    const z = bz(b), rc = fac ? "#5b6068" : h ? h.roof : "#3c4049";
+    for (let k = 0, ks = Math.max(.4, 1.5 / VZ); k < z; k += ks) { c.fillStyle = shade(rc, k < z * .5 ? .5 : .62); c.save(); c.translate(UPV.x * k, UPV.y * k); polyPath(c, b.f); c.fill(); c.restore(); }   // walls: the outline stacked up
+    c.save(); c.translate(UPV.x * z, UPV.y * z); c.fillStyle = rc; polyPath(c, b.f); c.fill();
     polyPath(c, b.f); c.clip(); c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(b.x0, b.y0, (b.x1 - b.x0) / 2, b.y1 - b.y0);
     if (fac) { c.fillStyle = "#6e747d"; for (let x = b.x0 + 3; x < b.x1 - 4; x += 8) c.fillRect(x, b.y0 + 3, 5, b.y1 - b.y0 - 6); }
     else if (h) { c.strokeStyle = "rgba(0,0,0,.3)"; c.lineWidth = 1; c.beginPath(); if (b.x1 - b.x0 > b.y1 - b.y0) { c.moveTo(b.x0, (b.y0 + b.y1) / 2); c.lineTo(b.x1, (b.y0 + b.y1) / 2); } else { c.moveTo((b.x0 + b.x1) / 2, b.y0); c.lineTo((b.x0 + b.x1) / 2, b.y1); } c.stroke(); }
-    c.restore(); c.save(); c.translate(0, -z); c.strokeStyle = "rgba(255,255,255,.1)"; c.lineWidth = .8; polyPath(c, b.f); c.stroke(); c.restore();
+    c.restore(); c.save(); c.translate(UPV.x * z, UPV.y * z); c.strokeStyle = "rgba(255,255,255,.12)"; c.lineWidth = .8; polyPath(c, b.f); c.stroke(); c.restore();
   }
   // street names along the longest straight piece of each street
   c.font = "600 12px Barlow, sans-serif"; c.textAlign = "center"; const done = new Set();
@@ -885,13 +886,13 @@ function drawBgMap(c) {
   }
   // generator and service depot (same look as the invented quarter, moved to a free lot)
   c.save(); c.translate(GOFF.x, GOFF.y);
-  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5);
+  if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5); }
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177); c.restore();
   c.save(); c.translate(DEPR.x - 548, DEPR.y - 104);
-  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6);
+  if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
   for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(552, 112 + i * 30); c.lineTo(610, 112 + i * 30); c.stroke(); }
@@ -1009,16 +1010,30 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 // ---------- Canvas ----------
 const cv = document.getElementById("cv"), ctx0 = cv.getContext("2d");
 let ctx = ctx0;
-function upright(c) {   // text on the flattened map is drawn standing up, not squashed
+// Two views: the angled top-down view (default) and the isometric view (?iso=1 or the ISO button): the map turned 45° into a diamond.
+// Both are one linear projection B (map units -> screen units), so taps map back exactly with unproj().
+const KY = .72;
+const ISO = (() => { try { const q = new URLSearchParams(location.search).get("iso"); if (q != null) localStorage.setItem("lightThemUp.iso", q === "1" ? "1" : ""); return !!localStorage.getItem("lightThemUp.iso"); } catch (e) { return false; } })();
+const B = ISO ? [.7071, .3536, -.7071, .3536] : [1, 0, 0, KY];   // X = B0 x + B2 y, Y = B1 x + B3 y
+const BDET = B[0] * B[3] - B[1] * B[2];
+const proj = (x, y) => ({x:B[0] * x + B[2] * y, y:B[1] * x + B[3] * y});
+const unproj = (X, Y) => ({x:(B[3] * X - B[2] * Y) / BDET, y:(-B[1] * X + B[0] * Y) / BDET});
+const UPV = unproj(0, -1), up = z => ({x:UPV.x * z, y:UPV.y * z});   // straight up on the screen, in map units
+const SHV = unproj(.85, .45);   // shadows fall down-right on the screen
+function pbox() { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const [x, y] of [[0, 0], [W, 0], [0, VH()], [W, VH()]]) { const q = proj(x, y); x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); } return {x0, y0, x1, y1, w:x1 - x0, h:y1 - y0}; }
+function uprightAt(c, ax, ay, fn) {   // draw fn() standing up at map point (ax, ay): screen-aligned, same size as the map around it
+  const m = c.getTransform(), px = m.a * ax + m.c * ay + m.e, py = m.b * ax + m.d * ay + m.f, k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c) / Math.abs(BDET));
+  c.save(); c.setTransform(k, 0, 0, k, px, py); c.translate(-ax, -ay); fn(); c.restore();
+}
+function upright(c) {   // all text on the map stands up and stays straight
   for (const f of ["fillText", "strokeText"]) { const o = c[f].bind(c);
-    c[f] = (t, x, y, mw) => { const m = c.getTransform(); if (m.b || m.c || Math.abs(m.d - m.a * KY) > m.a * .001) return mw === undefined ? o(t, x, y) : o(t, x, y, mw);
-      c.save(); c.translate(x, y); c.scale(1, 1 / KY); if (mw === undefined) o(t, 0, 0); else o(t, 0, 0, mw); c.restore(); }; }
+    c[f] = (t, x, y, mw) => { const m = c.getTransform(); if ((!ISO && (m.b || m.c)) || (Math.abs(m.b) < 1e-9 && Math.abs(m.c) < 1e-9 && Math.abs(m.d - m.a) < m.a * .001)) return mw === undefined ? o(t, x, y) : o(t, x, y, mw);
+      uprightAt(c, x, y, () => { if (mw === undefined) o(t, x, y); else o(t, x, y, mw); }); }; }
 }
 upright(ctx0);   // render() points this at the flat overlay (octx) for the badges, then back
 // ---------- Camera angle: the ground is drawn a bit flattened (KY), like a camera looking down at an angle, and buildings, posts and
 // text stand straight up on it. No perspective, so text stays straight and taps map back exactly.
 // Badges and banners are drawn on a second, flat canvas on top (cvo).
-const KY = .72;
 const ocv = document.getElementById("cvo"), octx = ocv.getContext("2d");
 let osW = 1, osH = 1;   // stage size, css px
 function layoutTilt() {
@@ -1027,38 +1042,38 @@ function layoutTilt() {
   const dpr = Math.min(2, window.devicePixelRatio || 1); ocv.width = Math.round(osW * dpr); ocv.height = Math.round(osH * dpr);
 }
 const stRect = () => { const st = cv.parentElement, r = st.getBoundingClientRect(); return {left:r.left + st.clientLeft, top:r.top + st.clientTop, right:r.left + st.clientLeft + osW, bottom:r.top + st.clientTop + osH}; };   // inside the border
-function scr2cv(cx, cy) { const r = stRect(); return {u:cx - r.left, v:(cy - r.top) / KY, r}; }   // screen -> css px on the unflattened map
-function cv2scr(u, v) { const r = stRect(); return {x:r.left + u, y:r.top + v * KY, r}; }
+function scr2cv(cx, cy) { const r = stRect(); return {u:cx - r.left, v:cy - r.top, r}; }   // screen -> css px on the map canvas
+function cv2scr(u, v) { const r = stRect(); return {x:r.left + u, y:r.top + v, r}; }
 const inStage = (q, pad = 0) => q.x > q.r.left + pad && q.x < q.r.right - pad && q.y > q.r.top + pad && q.y < q.r.bottom - pad;
-const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH / 2); return {x:c.u / cssW * W, y:c.v / cssW * W}; };   // screen centre in canvas units
+const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH / 2); return {x:c.u / cssW * pbox().w, y:c.v / cssW * pbox().w}; };   // screen centre in projected units
 const dark = document.createElement("canvas"), dctx = dark.getContext("2d");
 const bg = document.createElement("canvas"), bctx = bg.getContext("2d"); upright(bctx);
 let sc = 1, cssW = 1, cssH = 1;
-// Map camera: VZ = zoom, VX/VY = world point at the top-left of the screen. At VZ = 1 the map fills the width of the screen.
+// Map camera: VZ = zoom, VX/VY = projected point (proj()) at the top-left of the screen. At VZ = 1 the map fills the width of the screen.
 // VSH() = how many map units the screen shows from top to bottom at VZ = 1 (the screen can be shorter than the map, then you scroll).
 let VZ = 1, VX = 0, VY = 0, bgV = {z:1, x:0, y:0};
-const VT = c => c.setTransform(sc * VZ, 0, 0, sc * VZ * KY, -VX * sc * VZ, -VY * sc * VZ * KY);
+const VT = c => { const k = sc * VZ; c.setTransform(k * B[0], k * B[1], k * B[2], k * B[3], -VX * k, -VY * k); };
 function resize() {
   cssW = Math.max(1, cv.offsetWidth); cssH = Math.max(1, cv.offsetHeight);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = dark.width = bg.width = Math.max(1, Math.round(cssW * dpr));
   cv.height = dark.height = bg.height = Math.max(1, Math.round(cssH * dpr));
-  sc = cv.width / W; fixView(); drawBg();
+  sc = cv.width / pbox().w; fixView(); drawBg();
 }
 new ResizeObserver(resize).observe(cv);
-const VSH = () => W * cssH / cssW / KY;
+const VSH = () => pbox().w * cssH / cssW;   // projected units visible top to bottom at VZ = 1
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
-const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) / KY;   // walls stand up toward the viewer
+const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) * (ISO ? 1.5 : 1);   // building height, screen units: walls stand up toward the viewer
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
-const ZMAX = 3.5, zMin = () => Math.min(1, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
+const ZMAX = ISO ? 5 : 3.5, zMin = () => Math.min(1, VSH() / pbox().h);   // zoomed all the way out, the whole map fits on the screen
 const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
-function fixView() { VZ = clamp(VZ, zMin(), ZMAX); VX = fitV(VX, W, W / VZ); VY = fitV(VY, VH(), VSH() / VZ); }
-const canPan = () => W / VZ < W - .5 || VSH() / VZ < VH() - .5;
+function fixView() { const P = pbox(); VZ = clamp(VZ, zMin(), ZMAX); VX = P.x0 + fitV(VX - P.x0, P.w, P.w / VZ); VY = P.y0 + fitV(VY - P.y0, P.h, VSH() / VZ); }
+const canPan = () => { const P = pbox(); return P.w / VZ < P.w - .5 || VSH() / VZ < P.h - .5; };
 
 function drawBg() {
   const c = bctx; c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#0c120e"; c.fillRect(0, 0, bg.width, bg.height); VT(c); bgV = {z:VZ, x:VX, y:VY};
-  if (W / VZ > W + 1 || VSH() / VZ > VH() + 1) {   // zoomed out past the map: dark fields and a few far-off roads around the town
+  if (pbox().w / VZ > pbox().w + 1 || VSH() / VZ > pbox().h + 1) {   // zoomed out past the map: dark fields and a few far-off roads around the town
     c.fillStyle = "#16201a"; for (let i = -6; i < 12; i++) for (let j = -4; j < 9; j++) if ((i * 7 + j * 13) % 5) c.fillRect(i * 140 + 8, j * 150 + 8, 124, 134);
     c.fillStyle = "#1a1f26"; for (const y of [120, 545]) { c.fillRect(-2000, y - 9, 2000, 18); c.fillRect(W, y - 9, 2000, 18); }
     c.save(); c.shadowColor = "rgba(0,0,0,.8)"; c.shadowBlur = 30 * sc * VZ; c.fillStyle = "#17211b"; c.fillRect(0, 0, W, VH()); c.restore(); }
@@ -1103,29 +1118,33 @@ function drawBg() {
   if (S.zCen) { const r = ZONES2.cen.r; c.fillStyle = "#3b3833"; c.fillRect(r[0], r[1], r[2], r[3]); c.fillStyle = "rgba(255,240,215,.07)";
     for (let y = r[1] + 2; y < r[1] + r[3]; y += 9) for (let x = r[0] + 2 + ((y / 9 | 0) % 2) * 4; x < r[0] + r[2]; x += 9) c.fillRect(x, y, 7, 7); }
   if (S.zInd) { const r = ZONES2.ind.r; c.fillStyle = "#2a2d31"; c.fillRect(r[0], r[1], r[2], r[3]); }
-  for (const h of houses) {
-    if (h.fac && !S.zInd) continue;
+  const hs0 = houses.filter(h => !(h.fac && !S.zInd));
+  for (const h of hs0) { const z = BZ(h); c.fillStyle = "rgba(0,0,0,.36)"; for (let k = 0; k <= 1; k += .25) c.fillRect(h.x + SHV.x * z * k, h.y + SHV.y * z * k, h.w, h.h); }   // ground shadows
+  for (const h of hs0.sort((a, b) => proj(a.x + a.w, a.y + a.h).y - proj(b.x + b.w, b.y + b.h).y)) {   // back to front
     const fac = S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r);
-    const z = BZ(h), rc = fac ? "#5b6068" : h.roof, ry = h.y - z;   // ry: top of the raised roof
-    c.fillStyle = "rgba(0,0,0,.38)"; c.beginPath(); c.moveTo(h.x + h.w, ry + 2); c.lineTo(h.x + h.w + z * 1.1, ry + z * .9 + 2); c.lineTo(h.x + h.w + z * 1.1, h.y + h.h + z * .6); c.lineTo(h.x + z * .6, h.y + h.h + z * .6); c.lineTo(h.x, h.y + h.h); c.closePath(); c.fill();   // shadow falls down-right
-    c.fillStyle = shade(rc, .62); c.fillRect(h.x, ry + h.h, h.w, z);   // front wall
-    c.fillStyle = "rgba(0,0,0,.25)"; c.fillRect(h.x, ry + h.h, h.w, 1);
-    if (!fac) { c.fillStyle = "rgba(20,24,34,.75)"; for (let x = h.x + 4; x < h.x + h.w - 4; x += 9) c.fillRect(x, ry + h.h + 2, 4, Math.max(2, z - 4)); }   // dark windows; lit ones come at night
+    const z = BZ(h), o = up(z), rc = fac ? "#5b6068" : h.roof, X0 = h.x, X1 = h.x + h.w, Y0 = h.y, Y1 = h.y + h.h, ry = h.y;
+    const quad = (pts, col) => { c.fillStyle = col; c.beginPath(); pts.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); };
+    quad([[X0, Y1], [X1, Y1], [X1 + o.x, Y1 + o.y], [X0 + o.x, Y1 + o.y]], shade(rc, .6));   // front wall (lit side)
+    quad([[X1, Y0], [X1, Y1], [X1 + o.x, Y1 + o.y], [X1 + o.x, Y0 + o.y]], shade(rc, .42));   // side wall (in shade); flat view: none
+    if (!fac) { for (let x = X0 + 4; x < X1 - 4; x += 9) quad([[x + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .8, Y1 + o.y * .8], [x + o.x * .8, Y1 + o.y * .8]], "rgba(20,24,34,.75)");
+      if (ISO) for (let y = Y0 + 4; y < Y1 - 4; y += 9) quad([[X1 + o.x * .2, y + o.y * .2], [X1 + o.x * .2, y + 4 + o.y * .2], [X1 + o.x * .8, y + 4 + o.y * .8], [X1 + o.x * .8, y + o.y * .8]], "rgba(20,24,34,.75)"); }   // dark windows; lit ones come at night
+    c.save(); c.translate(o.x, o.y);   // the roof, lifted up
     c.fillStyle = rc; c.fillRect(h.x, ry, h.w, h.h);
     if (fac) { c.fillStyle = "#6e747d"; for (let x = h.x + 3; x < h.x + h.w - 4; x += 8) c.fillRect(x, ry + 3, 5, h.h - 6); c.fillStyle = "#7a3a2a"; c.fillRect(h.x + h.w - 9, ry + 3, 6, 6); }
     c.strokeStyle = "rgba(0,0,0,.35)"; c.lineWidth = 1;
     c.beginPath(); c.moveTo(h.x + h.w/2, ry); c.lineTo(h.x + h.w/2, ry + h.h); c.stroke();
     if (h.plot) { c.strokeStyle = "rgba(0,0,0,.18)"; for (let yy = ry + 5; yy < ry + h.h; yy += 5) { c.beginPath(); c.moveTo(h.x, yy); c.lineTo(h.x + h.w, yy); c.stroke(); } }
-    c.fillStyle = "rgba(255,255,255,.08)"; c.fillRect(h.x, ry, h.w/2, h.h); c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(h.x, ry, h.w, 1.2);
+    c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(h.x, ry, h.w/2, h.h); c.fillStyle = "rgba(255,255,255,.16)"; c.fillRect(h.x, ry, h.w, 1.2); c.fillRect(h.x, ry, 1.2, h.h);
+    c.restore();
   }
   // generator
-  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5);
+  if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5); }
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177);
   // depot
-  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6);
+  if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
   for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(552, 112 + i * 30); c.lineTo(610, 112 + i * 30); c.stroke(); }
@@ -1333,7 +1352,7 @@ function slotAt(p, rad) {
   for (const s of slots) { const d = s.axis === "xy" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
   return best;
 }
-function toWorld(e) { const c = scr2cv(e.clientX, e.clientY); return {x:c.u / cssW * W / VZ + VX, y:c.v / cssW * W / VZ + VY}; }
+function toWorld(e) { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return unproj(c.u / cssW * pw / VZ + VX, c.v / cssW * pw / VZ + VY); }
 const hitR = () => Math.max(22, 16 * W / cssW) / VZ;
 
 cv.addEventListener("pointerdown", e => {
@@ -1473,7 +1492,7 @@ document.addEventListener("pointermove", e => {
   const cx = e.clientX, cy = e.clientY - 34, cc = scr2cv(cx, cy), r = cc.r;
   const pd = S.pending;
   if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) { if (pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by); S.pending = null; msg(Tx("Prevuci svetiljku na mapu, pored ulice ili u park.")); return; }
-  const p = {x:cc.u / cssW * W / VZ + VX, y:cc.v / cssW * W / VZ + VY}, sp = palSpot(p);
+  const p = toWorld({clientX:cx, clientY:cy}), sp = palSpot(p);
   if (sp !== pd && pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by);
   if (!sp) { S.pending = null; msg(MAP ? Tx("Ovde ne može: to su kuće i dvorišta. Lampa ide samo pored ulice ili u park, i samo se oni broje u Svetlo %.") : Tx("Ovde ne može: lampa ide pored ulice ili u park, ne preblizu druge lampe."), true); return; }
   S.pending = sp; S.sel = sp; if (!sp.lamp && sp !== tmp) moveSlot(sp, p.x, p.y);
@@ -2312,13 +2331,13 @@ function updateTraffic(dt) {
 // Vehicles in 3D: shadow and wheels on the road, the body stacked up toward the viewer (darker sides), and the roof with its details on top.
 function vehicle3d(x, y, ang, L, Wd, hgt, col, top) {
   const box = (dx, dy, l, w, r) => { ctx.beginPath(); ctx.roundRect(dx - l, dy - w, l * 2, w * 2, r); };
-  ctx.save(); ctx.translate(x + 2.5, y + 3.5); ctx.rotate(ang); ctx.fillStyle = "rgba(0,0,0,.4)"; box(0, 0, L + 1, Wd + 1, 4); ctx.fill(); ctx.restore();   // shadow
+  ctx.save(); ctx.translate(x + SHV.x * 4, y + SHV.y * 4); ctx.rotate(ang); ctx.fillStyle = "rgba(0,0,0,.4)"; box(0, 0, L + 1, Wd + 1, 4); ctx.fill(); ctx.restore();   // shadow
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.fillStyle = "#121318";
   for (const sx of [-.62, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.roundRect(L * sx - 2.8, sy * (Wd + .7) - 1.8, 5.6, 3.6, 1.3); ctx.fill(); }   // wheels
   ctx.restore();
-  const dz = hgt / KY, side = shade(col, .58), mid = shade(col, .78);
-  for (let k = 0; k < dz; k += .8) { ctx.save(); ctx.translate(x, y - k); ctx.rotate(ang); ctx.fillStyle = k > dz * .55 ? mid : side; box(0, 0, L, Wd, 3); ctx.fill(); ctx.restore(); }   // body
-  ctx.save(); ctx.translate(x, y - dz); ctx.rotate(ang); top(); ctx.restore();   // roof
+  const dz = hgt * (ISO ? 1.4 : 1), side = shade(col, .5), mid = shade(col, .72);
+  for (let k = 0; k < dz; k += .8) { ctx.save(); ctx.translate(x + UPV.x * k, y + UPV.y * k); ctx.rotate(ang); ctx.fillStyle = k > dz * .55 ? mid : side; box(0, 0, L, Wd, 3); ctx.fill(); ctx.restore(); }   // body
+  ctx.save(); ctx.translate(x + UPV.x * dz, y + UPV.y * dz); ctx.rotate(ang); top(); ctx.restore();   // roof
 }
 function drawTraffic() {
   const night = S.phase === "night", now = performance.now();
@@ -2640,7 +2659,8 @@ function face(x, y, mood) {
   if (mood > 0) ctx.arc(x, y + .5, 2.6, .2, Math.PI - .2); else if (mood < 0) ctx.arc(x, y + 4, 2.6, Math.PI + .3, -.3); else { ctx.moveTo(x - 2.5, y + 2); ctx.lineTo(x + 2.5, y + 2); }
   ctx.stroke();
 }
-function lampHead(s, col, lit) {
+function lampHead(s, col, lit) { uprightAt(ctx, s.x, s.y, () => lampHead0(s, col, lit)); }
+function lampHead0(s, col, lit) {
   if (s.lamp.m.style === "moderna" && s.lamp.m.kind !== "park") {
     ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(s.x - 6, s.y - 2.5, 12, 5, 2) : ctx.rect(s.x - 6, s.y - 2.5, 12, 5); ctx.fill();
   } else if (s.lamp.m.style === "klasična" && s.lamp.m.kind !== "park") {
@@ -2708,25 +2728,26 @@ function drawGen0() {
 }
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#05070f"; ctx.fillRect(0, 0, cv.width, cv.height);
-  { const k = VZ / bgV.z; ctx.setTransform(k, 0, 0, k, (bgV.x - VX) * sc * VZ, (bgV.y - VY) * sc * VZ * KY); ctx.drawImage(bg, 0, 0); }   // stretched for a moment while zooming, redrawn sharp right after
+  { const k = VZ / bgV.z; ctx.setTransform(k, 0, 0, k, (bgV.x - VX) * sc * VZ, (bgV.y - VY) * sc * VZ); ctx.drawImage(bg, 0, 0); }   // stretched for a moment while zooming, redrawn sharp right after
   VT(ctx);
   for (const s of slots) {
     if (!avail(s)) continue;
     if (!s.lamp) { ctx.strokeStyle = s.zone === "park" ? "rgba(255,200,130,.5)" : "rgba(200,210,230,.28)"; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); continue; }
-    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x, s.y + 9); ctx.lineTo(s.x + 9, s.y + 15); ctx.stroke();   // post shadow on the ground
-    ctx.strokeStyle = "#5a606c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y + 9); ctx.stroke();
+    const pb = {x:s.x - UPV.x * 6.5, y:s.y - UPV.y * 6.5};   // foot of the post, straight below the lamp on the screen
+    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(pb.x, pb.y); ctx.lineTo(pb.x + SHV.x * 9, pb.y + SHV.y * 9); ctx.stroke();   // post shadow on the ground
+    uprightAt(ctx, pb.x, pb.y, () => { ctx.strokeStyle = "#5a606c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(pb.x, pb.y); ctx.lineTo(pb.x, pb.y - 6.5); ctx.stroke(); });
     ctx.fillStyle = "#4a4f5c"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, 6.28); ctx.fill();
   }
   for (const r of refls) { // tripod
     ctx.strokeStyle = "#7a8496"; ctx.lineWidth = 1.5; ctx.beginPath();
     ctx.moveTo(r.x, r.y); ctx.lineTo(r.x - 6, r.y + 7); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x + 6, r.y + 7); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x, r.y + 8); ctx.stroke();
   }
-  for (const h of hoods) {
+  for (const h of hoods) uprightAt(ctx, h.x, h.y, () => {
     const b = Math.sin(h.bob) * 1.2;
     ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(h.x + 2, h.y + 7, 7, 3, 0, 0, 6.28); ctx.fill();
     ctx.fillStyle = "#2b2d36"; ctx.beginPath(); ctx.arc(h.x, h.y + b, 7.5, 0, 6.28); ctx.fill();
     ctx.fillStyle = "#1b1c22"; ctx.beginPath(); ctx.arc(h.x, h.y - 3 + b, 5, 0, 6.28); ctx.fill();
-  }
+  });
   for (const c of CARS) {
     if (c.gone || (c.y > boundY())) continue;
     vehicle3d(c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, 12, 6, 5.5, c.col, () => {   // parked cars
@@ -2745,7 +2766,7 @@ function render() {
     if (own && k === "ind" && S.phase === "day") for (const h of houses) if (h.fac) { const t = performance.now() / 900 + h.id; for (let i = 0; i < 3; i++) { const k2 = (t + i / 3) % 1; ctx.fillStyle = `rgba(200,205,215,${.35 * (1 - k2)})`; ctx.beginPath(); ctx.arc(h.x + h.w - 6 + k2 * 6, h.y + 3 - k2 * 18, 2.5 + k2 * 4, 0, 6.28); ctx.fill(); } }
     if (!own) { ctx.strokeStyle = "rgba(241,196,83,.28)"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]); ctx.strokeRect(r[0] + 2, r[1] + 2, r[2] - 4, r[3] - 4); ctx.setLineDash([]); }
     ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, lx = r[0] + r[2] / 2, ly = r[1] + r[3] - 10;
-    ctx.fillStyle = "rgba(8,10,20,.7)"; ctx.fillRect(lx - tw / 2, ly - 11, tw, 15); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }
+    uprightAt(ctx, lx, ly, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
   for (const r of rocks) { const k = r.t / r.dur; ctx.fillStyle = "#bbb"; ctx.beginPath(); ctx.arc(r.x + (r.tx - r.x) * k, r.y + (r.ty - r.y) * k - Math.sin(k * Math.PI) * 14, 2.2, 0, 6.28); ctx.fill(); }
 
   // darkness (strong at night, a light dusk tint by day)
@@ -2780,8 +2801,8 @@ function render() {
   drawWeather();
   if (S.heat) { ctx.font = "700 10px Barlow, sans-serif"; ctx.textAlign = "center";
     for (const h of houses) { if (!hOn(h)) continue; const v = h.sat;
-      const z = BZ(h); ctx.fillStyle = `hsla(${Math.round(v * 120)},85%,50%,.62)`; if (h.poly) { ctx.save(); ctx.translate(0, -z); polyPath(ctx, h.poly); ctx.fill(); ctx.restore(); } else ctx.fillRect(h.x, h.y - z, h.w, h.h);
-      ctx.fillStyle = "#0b1120"; ctx.fillText(Math.round(v * 100) + "%", h.cx, h.cy - z + 3.5); } }
+      const o = up(BZ(h)); ctx.fillStyle = `hsla(${Math.round(v * 120)},85%,50%,.62)`; ctx.save(); ctx.translate(o.x, o.y); if (h.poly) { polyPath(ctx, h.poly); ctx.fill(); } else ctx.fillRect(h.x, h.y, h.w, h.h);
+      ctx.fillStyle = "#0b1120"; ctx.fillText(Math.round(v * 100) + "%", h.cx, h.cy + 3.5); ctx.restore(); } }
 
   if (MAP) drawLandmarks();
   drawGen();
@@ -2789,16 +2810,20 @@ function render() {
   // windows and satisfaction bars
   for (const h of houses) {
     if (!hOn(h)) continue;
-    const z = BZ(h), ry = h.y - z;
+    const z = BZ(h), o = up(z), Y1 = h.y + h.h, X1 = h.x + h.w;
+    const wq = (pts) => { ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); };
     [[.25, .28], [.68, .28], [.25, .68], [.68, .68]].forEach((p, i) => {
       if (!h.win[i]) return;
       ctx.fillStyle = h.glow > .05 ? `rgba(255,205,110,${.25 + .7 * h.glow})` : S.phase === "day" ? "rgba(150,180,210,.5)" : "rgba(40,50,80,.5)";
-      ctx.fillRect(h.x + h.w * p[0] - 2.5, ry + h.h * p[1] - 3, 5, 6);
-      if (h.glow > .05 && !h.poly && !h.fac && 8 + 9 * i < h.w) ctx.fillRect(h.x + 4 + 9 * i, ry + h.h + 2, 4, Math.max(2, z - 4));   // the same light in the front wall
+      ctx.fillRect(h.x + h.w * p[0] - 2.5 + o.x, h.y + h.h * p[1] - 3 + o.y, 5, 6);
+      if (h.glow > .05 && !h.poly && !h.fac) {   // the same light in the walls
+        const x = h.x + 4 + 9 * i; if (x + 4 < X1 - 2) wq([[x + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .8, Y1 + o.y * .8], [x + o.x * .8, Y1 + o.y * .8]]);
+        const y = h.y + 4 + 9 * i; if (ISO && y + 4 < Y1 - 2) wq([[X1 + o.x * .2, y + o.y * .2], [X1 + o.x * .2, y + 4 + o.y * .2], [X1 + o.x * .8, y + 4 + o.y * .8], [X1 + o.x * .8, y + o.y * .8]]);
+      }
     });
     if (h.lit || (S.phase === "day" && h.sat > .02)) {
-      ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(h.x + 3, ry + h.h - 6, h.w - 6, 4);
-      ctx.fillStyle = h.sat > .6 ? "#7ed39a" : h.sat > .3 ? "#f1c453" : "#ff9d8f"; ctx.fillRect(h.x + 3.5, ry + h.h - 5.5, (h.w - 7) * h.sat, 3);
+      ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(h.x + 3 + o.x, h.y + h.h - 6 + o.y, h.w - 6, 4);
+      ctx.fillStyle = h.sat > .6 ? "#7ed39a" : h.sat > .3 ? "#f1c453" : "#ff9d8f"; ctx.fillRect(h.x + 3.5 + o.x, h.y + h.h - 5.5 + o.y, (h.w - 7) * h.sat, 3);
     }
   }
   for (const s of slots) {
@@ -2855,9 +2880,9 @@ function render() {
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
     else { txt = pct + "%"; col = pct > 50 ? "#9fe0b3" : pct > 20 ? "#f1c453" : "#ff6b5b"; }
     const ty = s.y - 11, tw = ctx.measureText(txt).width + 8;
-    ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(s.x - tw / 2 - 7, ty - 10, tw + 14, 13);
-    ctx.fillStyle = col; ctx.fillText(txt, s.x - 7, ty);
-    face(s.x + tw / 2, ty - 3.5, L.mood ?? moodOf(s, L.m)[0]);
+    uprightAt(ctx, s.x, s.y, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(s.x - tw / 2 - 7, ty - 10, tw + 14, 13, 6.5); ctx.fill();
+      ctx.fillStyle = col; ctx.fillText(txt, s.x - 7, ty);
+      face(s.x + tw / 2, ty - 3.5, L.mood ?? moodOf(s, L.m)[0]); });
     if (L.state === "ok" && L.powered) { ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(s.x - 9, s.y + 7, 18, 2.5); ctx.fillStyle = col; ctx.fillRect(s.x - 9, s.y + 7, 18 * L.life, 2.5); }
   }
   // radar preview
@@ -2914,11 +2939,11 @@ function render() {
   ctx.globalAlpha = 1;
   if (S.mission && S.mission.type === "house" && S.phase === "night") { const h = houses[S.mission.house];
     if (h) { const ok = !S.mission.fail, pu = .6 + .4 * Math.sin(performance.now() / 250);
-      ctx.strokeStyle = ok ? `rgba(126,211,154,${pu})` : "rgba(255,107,91,.8)"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.strokeRect(h.x - 4, h.y - BZ(h) - 4, h.w + 8, h.h + BZ(h) + 8); ctx.setLineDash([]);
-      ctx.font = "bold 12px system-ui"; ctx.textAlign = "center"; const tx = ok ? Tx("ČUVAJ") : "OBIJENA"; const w = ctx.measureText(tx).width + 10;
-      ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(h.cx - w / 2, h.y - BZ(h) - 22, w, 16); ctx.fillStyle = ok ? "#7ed39a" : "#ff6b5b"; ctx.fillText(tx, h.cx, h.y - BZ(h) - 10); } }
+      ctx.strokeStyle = ok ? `rgba(126,211,154,${pu})` : "rgba(255,107,91,.8)"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); { const o = up(BZ(h)); ctx.strokeRect(h.x - 4 + o.x, h.y - 4 + o.y, h.w + 8, h.h + 8); } ctx.setLineDash([]);
+      ctx.font = "bold 12px system-ui"; ctx.textAlign = "center"; const tx = ok ? Tx("ČUVAJ") : "OBIJENA"; const w = ctx.measureText(tx).width + 10, o = up(BZ(h)), ax = h.cx + o.x, ay = h.y + o.y;
+      uprightAt(ctx, ax, ay, () => { ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(ax - w / 2, ay - 22, w, 16); ctx.fillStyle = ok ? "#7ed39a" : "#ff6b5b"; ctx.fillText(tx, ax, ay - 10); }); } }
   for (const t of thieves) if (t.rep > 0) {   // residents reported this thief
-    const pu = (performance.now() / 200 | 0) % 2, by = boundY(), ex = clamp(t.x, VX + 16 / VZ, VX + (W - 16) / VZ), ey = clamp(t.y, VY + 16 / VZ, Math.min(by, VY + VSH() / VZ) - 16 / VZ);
+    const pu = (performance.now() / 200 | 0) % 2, by = boundY(), tq = proj(t.x, t.y), eq = unproj(clamp(tq.x, VX + 16 / VZ, VX + (pbox().w - 16) / VZ), clamp(tq.y, VY + 16 / VZ, VY + (VSH() - 16) / VZ)), ex = eq.x, ey = eq.y; void by;
     ctx.strokeStyle = pu ? "#ff6b5b" : "#ffd84a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, 13, 0, 6.28); ctx.stroke();
     ctx.fillStyle = "#ffd84a"; ctx.strokeStyle = "#0b1120"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ex, ey - 11); ctx.lineTo(ex + 11, ey + 8); ctx.lineTo(ex - 11, ey + 8); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#0b1120"; ctx.font = "800 13px Barlow, sans-serif"; ctx.textAlign = "center"; ctx.fillText("!", ex, ey + 6);
@@ -2929,7 +2954,7 @@ function render() {
     ctx.strokeStyle = pulse ? "#ff6b5b" : "#f1c453"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(t.x, t.y, 15, -Math.PI / 2, -Math.PI / 2 + k * 6.283); ctx.stroke();
     const lbl = t.g.kind === "car" ? Tx("KRADE KOLA!") : t.g.kind === "spot" ? Tx("PLJAČKA!") : Tx("OBIJA STAN!"); ctx.font = "700 14px Barlow Condensed, sans-serif"; ctx.textAlign = "center";
     const ly2 = t.y < 40 ? t.y + 32 : t.y - 20, tw = ctx.measureText(lbl).width + 8;
-    ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(t.x - tw / 2, ly2 - 12, tw, 16); ctx.fillStyle = "#ffd84a"; ctx.fillText(lbl, t.x, ly2);
+    uprightAt(ctx, t.x, t.y, () => { ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(t.x - tw / 2, ly2 - 12, tw, 16); ctx.fillStyle = "#ffd84a"; ctx.fillText(lbl, t.x, ly2); });
   }
   ctx = octx;
   { const k = Math.min(1, 640 / osW), wk = W / k, hk = W * osH / osW / k; ctx.setTransform(osc * k, 0, 0, osc * k, 0, 0);   // attribution stays on the screen, not on the map
@@ -2958,7 +2983,7 @@ function drawGang() {
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 6.28); ctx.stroke(); ctx.setLineDash([]);
     ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(8,10,20,.7)";
     const t = z.perm ? Tx("banda se iselila") : Tx`zatvoreno za bandu · ${Math.max(1, z.until - S.night + (S.phase === "day" ? 0 : 1))} n.`, tw = ctx.measureText(t).width + 8;
-    ctx.fillRect(z.x - tw / 2, z.y + z.r - 16, tw, 14); ctx.fillStyle = "#9fe0b3"; ctx.fillText(t, z.x, z.y + z.r - 5);
+    { const fs = ctx.fillStyle; uprightAt(ctx, z.x, z.y + z.r, () => { ctx.fillStyle = fs; ctx.fillRect(z.x - tw / 2, z.y + z.r - 16, tw, 14); ctx.fillStyle = "#9fe0b3"; ctx.fillText(t, z.x, z.y + z.r - 5); }); }
   }
   if (!G.gone) {
     // routes: open ones red and moving, closed ones grey
@@ -2986,6 +3011,10 @@ function wrapText(t, x, y, maxW, lh) {
 }
 function drawVan(v) {
   const home = v.state === "home", now = performance.now();
+  if ((v.state === "drive" || v.state === "return") && S.phase === "night") {   // two headlight beams on the road ahead
+    ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.ang); const g = ctx.createLinearGradient(12, 0, 52, 0); g.addColorStop(0, "rgba(255,244,210,.45)"); g.addColorStop(1, "rgba(255,244,210,0)"); ctx.fillStyle = g;
+    for (const sy of [-4, 4]) { ctx.beginPath(); ctx.moveTo(12, sy - 1.2); ctx.lineTo(52, sy * 2.6 - 7); ctx.lineTo(52, sy * 2.6 + 7); ctx.lineTo(12, sy + 1.2); ctx.closePath(); ctx.fill(); }
+    ctx.restore(); }
   vehicle3d(v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, 13, 7, 8, S.armor ? "#8b939e" : "#eef0f3", () => {
   ctx.fillStyle = S.armor ? "#8b939e" : "#eef0f3"; ctx.beginPath(); ctx.roundRect(-13, -7, 26, 14, 3); ctx.fill();
   if (S.armor) { ctx.strokeStyle = "#5d6470"; ctx.lineWidth = 1; ctx.strokeRect(-12, -6, 24, 12); ctx.fillStyle = "#5d6470"; for (const x of [-10, -2, 6]) for (const y of [-5, 4]) ctx.fillRect(x, y, 1.5, 1.5); }
@@ -3068,12 +3097,12 @@ $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
-  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW}), toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
+  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW, PW:pbox().w, ISO}), proj, toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }};
 
 
 // ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
-const ZKEY = MAP ? "lightThemUp.zoom4" : "lightThemUp.zoomQ4";
+const ZKEY = (MAP ? "lightThemUp.zoom4" : "lightThemUp.zoomQ4") + (ISO ? "i" : "");
 function setView(z, x, y) {
   VZ = z; VX = x; VY = y; fixView(); bgLater();
   try { localStorage.setItem(ZKEY, VZ.toFixed(2)); } catch (e) {}
@@ -3084,18 +3113,20 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
 {
   $("zoomBox").hidden = false;
   resize();
-  let z0 = (mq.matches ? 1 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW))) * (MAP ? (mq.matches ? 1.4 : 1.15) : 1); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
-  VZ = z0; VX = (W - W / VZ) / 2; VY = MAP ? (VH() - VSH() / VZ) / 2 : 0; fixView(); drawBg();   // the invented quarter starts at the top, where the gang and the generator are
+  let z0 = ISO ? (mq.matches ? 2.2 : 1.2) * (MAP ? 1.3 : 1) : (mq.matches ? 1 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW))) * (MAP ? (mq.matches ? 1.4 : 1.15) : 1); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
+  { const P = pbox(); VZ = z0; fixView(); VX = P.x0 + (P.w - P.w / VZ) / 2; VY = MAP || ISO ? P.y0 + (P.h - VSH() / VZ) / 2 : P.y0; fixView(); drawBg(); }   // the invented quarter starts at the top, where the gang and the generator are
   const zc = z => { const c = scrCenterU(); zoomAt(z, c.x, c.y); };
   $("zIn").onclick = () => zc(VZ * 1.35);
   $("zOut").onclick = () => zc(VZ / 1.35);
   $("zFit").onclick = () => zc(zMin());
+  $("zIso").classList.toggle("on", ISO);   // try the isometric view: the page reloads in the other view, the game is saved
+  $("zIso").onclick = () => { try { save(); localStorage.setItem("lightThemUp.iso", ISO ? "" : "1"); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("iso"); location.replace(u.href); };
   const stage = $("stage"), pts = new Map(); let pinch = null, pan = null, defer = null, replay = false;
   // In Borča a touch is held back until the finger lifts: a short tap acts like before, any drag only moves the map.
   // Only a touch right on the lamp you are placing goes through at once, so that lamp can still be dragged.
   const nearPending = e => { const pd = S.pending; if (!pd || pd.lamp || pd.job) return false; const p = toWorld(e); return Math.hypot(pd.x - p.x, pd.y - p.y) < hitR() * 1.6; };
   const fire = (type, d) => { replay = true; try { cv.dispatchEvent(new PointerEvent(type, {clientX:d.x, clientY:d.y, pointerId:d.id, pointerType:d.type, isPrimary:true, bubbles:true, cancelable:true})); } finally { replay = false; } };
-  const unit = e => { const c = scr2cv(e.clientX, e.clientY); return {x:c.u / cssW * W, y:c.v / cssW * W}; };
+  const unit = e => { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return {x:c.u / cssW * pw, y:c.v / cssW * pw}; };
   stage.addEventListener("pointerdown", e => {
     if (e.target !== cv || replay) return;
     pts.set(e.pointerId, unit(e));
@@ -3195,7 +3226,7 @@ function tutShow() {
 function tutHand() {   // the pointing hand: on the target button, or on the map spot to tap
   const st = TUT[tut.i], h = $("tutHand"); let x = null, y = null; h.className = "tut-hand" + (st.hand ? " " + st.hand : "");
   const sp = st.spot && st.spot(), sc0 = st.scr && st.scr();
-  const spScr = sp => cv2scr((sp.x - VX) * VZ * cssW / W, (sp.y - VY) * VZ * cssW / W);
+  const spScr = sp => { const q = proj(sp.x, sp.y), f = VZ * cssW / pbox().w; return cv2scr((q.x - VX) * f, (q.y - VY) * f); };
   if (sc0) { const r = stRect(); x = r.left + sc0.x * osW / W; y = r.top + sc0.y * osW / W; } else
   if (sp && !inStage(spScr(sp), 40)) { const c = scrCenterU(); setView(VZ, sp.x - c.x / VZ, sp.y - c.y / VZ); }   // bring the spot into view
   if (sp) { const q = spScr(sp); x = q.x; y = q.y; if (!inStage(q)) x = null; }
