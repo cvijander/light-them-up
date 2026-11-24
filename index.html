@@ -121,7 +121,7 @@ body.tut-on .tool.bl,body.tut-on .grp.g2,body.tut-on #btnRef{visibility:hidden}
 .stage-wrap{display:flex;justify-content:center;align-items:flex-start;min-width:0}
 .stage{position:relative;width:100%;height:60vh;max-width:100%;margin-inline:auto;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#05070f}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
-#cv{position:absolute;left:0;top:0;transform-origin:50% 100%}
+#cv{position:absolute;left:0;top:0}
 #cvo{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2}
 .fab{position:absolute;right:8px;bottom:8px;min-width:64px;min-height:52px;border-radius:14px;border:1px solid #3b4a80;background:rgba(19,26,44,.92);color:var(--ref);cursor:pointer;padding:5px 8px;text-align:center;line-height:1.1}
 .fab b{display:block;font-family:var(--display);font-size:15px;text-transform:uppercase}
@@ -1008,54 +1008,50 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 
 // ---------- Canvas ----------
 const cv = document.getElementById("cv"), ctx0 = cv.getContext("2d");
-let ctx = ctx0;   // render() points this at the flat overlay (octx) for the badges, then back
-// ---------- Camera tilt: the map canvas is leaned back in 3D (CSS), taps are mapped back through the same projection ----------
-// The canvas is taller and wider than the screen box (stage) so that, leaned back, it still covers the whole box.
-// Badges and banners are drawn on a second, flat canvas on top (cvo), so text stays straight and sharp.
-let TILT = .5, TCOS = Math.cos(TILT), TSIN = Math.sin(TILT);   // phone: a bit less lean, so the sides of the map stay on screen
+let ctx = ctx0;
+function upright(c) {   // text on the flattened map is drawn standing up, not squashed
+  for (const f of ["fillText", "strokeText"]) { const o = c[f].bind(c);
+    c[f] = (t, x, y, mw) => { const m = c.getTransform(); if (m.b || m.c || Math.abs(m.d - m.a * KY) > m.a * .001) return mw === undefined ? o(t, x, y) : o(t, x, y, mw);
+      c.save(); c.translate(x, y); c.scale(1, 1 / KY); if (mw === undefined) o(t, 0, 0); else o(t, 0, 0, mw); c.restore(); }; }
+}
+upright(ctx0);   // render() points this at the flat overlay (octx) for the badges, then back
+// ---------- Camera angle: the ground is drawn a bit flattened (KY), like a camera looking down at an angle, and buildings, posts and
+// text stand straight up on it. No perspective, so text stays straight and taps map back exactly.
+// Badges and banners are drawn on a second, flat canvas on top (cvo).
+const KY = .72;
 const ocv = document.getElementById("cvo"), octx = ocv.getContext("2d");
-let tP = 1, osW = 1, osH = 1;   // perspective distance and stage size, css px
+let osW = 1, osH = 1;   // stage size, css px
 function layoutTilt() {
   const st = cv.parentElement; osW = Math.max(1, st.clientWidth); osH = Math.max(1, st.clientHeight);
-  const phone = osW < 700; TILT = (phone ? 28 : 32) * Math.PI / 180; TCOS = Math.cos(TILT); TSIN = Math.sin(TILT); tP = (phone ? 2.2 : 1.7) * osH;
-  const Ch = osH * tP / (tP * TCOS - osH * TSIN) + 2, Cw = osW * (tP + Ch * TSIN) / tP + 2;
-  cv.style.width = Cw + "px"; cv.style.height = Ch + "px"; cv.style.left = (osW - Cw) / 2 + "px"; cv.style.top = (osH - Ch) + "px";
-  cv.style.transform = `perspective(${tP}px) rotateX(${TILT}rad)`;
+  cv.style.width = osW + "px"; cv.style.height = osH + "px";
   const dpr = Math.min(2, window.devicePixelRatio || 1); ocv.width = Math.round(osW * dpr); ocv.height = Math.round(osH * dpr);
 }
 const stRect = () => { const st = cv.parentElement, r = st.getBoundingClientRect(); return {left:r.left + st.clientLeft, top:r.top + st.clientTop, right:r.left + st.clientLeft + osW, bottom:r.top + st.clientTop + osH}; };   // inside the border
-function scr2cv(cx, cy) {   // a point on the screen -> css px on the (flat) map canvas
-  const r = stRect(), X = cx - (r.left + osW / 2), Y = cy - (r.top + osH);
-  const y = Y * tP / Math.max(1, tP * TCOS + Y * TSIN), s = tP / (tP - y * TSIN);
-  return {u:X / s + cssW / 2, v:y + cssH, r};
-}
-function cv2scr(u, v) {   // css px on the map canvas -> the point on the screen
-  const r = stRect(), x = u - cssW / 2, y = v - cssH, s = tP / (tP - y * TSIN);
-  return {x:r.left + osW / 2 + x * s, y:r.top + osH + y * TCOS * s, r};
-}
+function scr2cv(cx, cy) { const r = stRect(); return {u:cx - r.left, v:(cy - r.top) / KY, r}; }   // screen -> css px on the unflattened map
+function cv2scr(u, v) { const r = stRect(); return {x:r.left + u, y:r.top + v * KY, r}; }
 const inStage = (q, pad = 0) => q.x > q.r.left + pad && q.x < q.r.right - pad && q.y > q.r.top + pad && q.y < q.r.bottom - pad;
-const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH * .55); return {x:c.u / cssW * W, y:c.v / cssW * W}; };   // screen centre in canvas units
+const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH / 2); return {x:c.u / cssW * W, y:c.v / cssW * W}; };   // screen centre in canvas units
 const dark = document.createElement("canvas"), dctx = dark.getContext("2d");
-const bg = document.createElement("canvas"), bctx = bg.getContext("2d");
+const bg = document.createElement("canvas"), bctx = bg.getContext("2d"); upright(bctx);
 let sc = 1, cssW = 1, cssH = 1;
 // Map camera: VZ = zoom, VX/VY = world point at the top-left of the screen. At VZ = 1 the map fills the width of the screen.
 // VSH() = how many map units the screen shows from top to bottom at VZ = 1 (the screen can be shorter than the map, then you scroll).
 let VZ = 1, VX = 0, VY = 0, bgV = {z:1, x:0, y:0};
-const VT = c => c.setTransform(sc * VZ, 0, 0, sc * VZ, -VX * sc * VZ, -VY * sc * VZ);
+const VT = c => c.setTransform(sc * VZ, 0, 0, sc * VZ * KY, -VX * sc * VZ, -VY * sc * VZ * KY);
 function resize() {
   cssW = Math.max(1, cv.offsetWidth); cssH = Math.max(1, cv.offsetHeight);
-  const dpr = Math.min(2, window.devicePixelRatio || 1, Math.sqrt(3.2e6 / (cssW * cssH)));   // the leaned canvas is big: keep it light on phones
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = dark.width = bg.width = Math.max(1, Math.round(cssW * dpr));
   cv.height = dark.height = bg.height = Math.max(1, Math.round(cssH * dpr));
   sc = cv.width / W; fixView(); drawBg();
 }
 new ResizeObserver(resize).observe(cv);
-const VSH = () => W * cssH / cssW;
+const VSH = () => W * cssH / cssW / KY;
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
-const BZ = h => !h ? 8 : h.fac ? 16 : h.plot ? 10 : h.poly ? (h.w * h.h > 1400 ? 15 : 10) : 14;
+const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) / KY;   // walls stand up toward the viewer
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
-const ZMAX = 3.5, zMin = () => Math.min(.75, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
+const ZMAX = 3.5, zMin = () => Math.min(1, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
 const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
 function fixView() { VZ = clamp(VZ, zMin(), ZMAX); VX = fitV(VX, W, W / VZ); VY = fitV(VY, VH(), VSH() / VZ); }
 const canPan = () => W / VZ < W - .5 || VSH() / VZ < VH() - .5;
@@ -2702,7 +2698,7 @@ function drawGen0() {
 }
 function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#05070f"; ctx.fillRect(0, 0, cv.width, cv.height);
-  { const k = VZ / bgV.z; ctx.setTransform(k, 0, 0, k, (bgV.x - VX) * sc * VZ, (bgV.y - VY) * sc * VZ); ctx.drawImage(bg, 0, 0); }   // stretched for a moment while zooming, redrawn sharp right after
+  { const k = VZ / bgV.z; ctx.setTransform(k, 0, 0, k, (bgV.x - VX) * sc * VZ, (bgV.y - VY) * sc * VZ * KY); ctx.drawImage(bg, 0, 0); }   // stretched for a moment while zooming, redrawn sharp right after
   VT(ctx);
   for (const s of slots) {
     if (!avail(s)) continue;
@@ -3068,7 +3064,7 @@ window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS
 
 
 // ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
-const ZKEY = MAP ? "lightThemUp.zoom3" : "lightThemUp.zoomQ3";
+const ZKEY = MAP ? "lightThemUp.zoom4" : "lightThemUp.zoomQ4";
 function setView(z, x, y) {
   VZ = z; VX = x; VY = y; fixView(); bgLater();
   try { localStorage.setItem(ZKEY, VZ.toFixed(2)); } catch (e) {}
@@ -3079,7 +3075,7 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
 {
   $("zoomBox").hidden = false;
   resize();
-  let z0 = (mq.matches ? .8 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW))) * (MAP ? 1.4 : 1); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
+  let z0 = (mq.matches ? 1 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW))) * (MAP ? (mq.matches ? 1.4 : 1.15) : 1); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
   VZ = z0; VX = (W - W / VZ) / 2; VY = MAP ? (VH() - VSH() / VZ) / 2 : 0; fixView(); drawBg();   // the invented quarter starts at the top, where the gang and the generator are
   const zc = z => { const c = scrCenterU(); zoomAt(z, c.x, c.y); };
   $("zIn").onclick = () => zc(VZ * 1.35);
