@@ -121,6 +121,8 @@ body.tut-on .tool.bl,body.tut-on .grp.g2,body.tut-on #btnRef{visibility:hidden}
 .stage-wrap{display:flex;justify-content:center;align-items:flex-start;min-width:0}
 .stage{position:relative;width:100%;height:60vh;max-width:100%;margin-inline:auto;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#05070f}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
+#cv{position:absolute;left:0;top:0;transform-origin:50% 100%}
+#cvo{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2}
 .fab{position:absolute;right:8px;bottom:8px;min-width:64px;min-height:52px;border-radius:14px;border:1px solid #3b4a80;background:rgba(19,26,44,.92);color:var(--ref);cursor:pointer;padding:5px 8px;text-align:center;line-height:1.1}
 .fab b{display:block;font-family:var(--display);font-size:15px;text-transform:uppercase}
 .fab span{font-size:11.5px;color:var(--muted)}
@@ -312,7 +314,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
     </div>
     <div class="stage-wrap" id="stageWrap">
       <div class="stage" id="stage">
-        <canvas id="cv" aria-label="Mapa kvarta"></canvas>
+        <canvas id="cv" aria-label="Mapa kvarta"></canvas><canvas id="cvo" aria-hidden="true"></canvas>
         <div class="zoom" id="zoomBox" hidden><button type="button" id="zIn" aria-label="Uveličaj">+</button><button type="button" id="zOut" aria-label="Umanji">−</button><button type="button" id="zFit" aria-label="Cela mapa">⤢</button></div>
         <div class="dawn" id="dawn" hidden role="dialog" aria-label="Izveštaj u zoru"><div class="dn-t"></div><div class="dn-rows"></div><ul class="dn-notes"></ul><button class="big" id="dawnOk" type="button">U redu</button></div>
       </div>
@@ -866,7 +868,7 @@ function drawBgMap(c) {
     const h = b.house != null ? houses[b.house] : null, fac = h && S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r);
     const z = h ? BZ(h) : 5, rc = fac ? "#5b6068" : h ? h.roof : "#3c4049";
     c.fillStyle = "rgba(0,0,0,.35)"; for (let k = 0; k <= 1; k += .5) { c.save(); c.translate(2 + z * .9 * k, 2 + z * .6 * k); polyPath(c, b.f); c.fill(); c.restore(); }   // shadow down-right
-    c.fillStyle = shade(rc, .6); for (let k = 0; k < z; k += 1.5) { c.save(); c.translate(0, -k); polyPath(c, b.f); c.fill(); c.restore(); }   // walls: the outline stacked up
+    c.fillStyle = shade(rc, .6); for (let k = 0, ks = Math.max(.4, 1.5 / VZ); k < z; k += ks) { c.save(); c.translate(0, -k); polyPath(c, b.f); c.fill(); c.restore(); }   // walls: the outline stacked up
     c.save(); c.translate(0, -z); c.fillStyle = rc; polyPath(c, b.f); c.fill();
     polyPath(c, b.f); c.clip(); c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(b.x0, b.y0, (b.x1 - b.x0) / 2, b.y1 - b.y0);
     if (fac) { c.fillStyle = "#6e747d"; for (let x = b.x0 + 3; x < b.x1 - 4; x += 8) c.fillRect(x, b.y0 + 3, 5, b.y1 - b.y0 - 6); }
@@ -1005,7 +1007,34 @@ function load(d) {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 
 // ---------- Canvas ----------
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const cv = document.getElementById("cv"), ctx0 = cv.getContext("2d");
+let ctx = ctx0;   // render() points this at the flat overlay (octx) for the badges, then back
+// ---------- Camera tilt: the map canvas is leaned back in 3D (CSS), taps are mapped back through the same projection ----------
+// The canvas is taller and wider than the screen box (stage) so that, leaned back, it still covers the whole box.
+// Badges and banners are drawn on a second, flat canvas on top (cvo), so text stays straight and sharp.
+let TILT = .5, TCOS = Math.cos(TILT), TSIN = Math.sin(TILT);   // phone: a bit less lean, so the sides of the map stay on screen
+const ocv = document.getElementById("cvo"), octx = ocv.getContext("2d");
+let tP = 1, osW = 1, osH = 1;   // perspective distance and stage size, css px
+function layoutTilt() {
+  const st = cv.parentElement; osW = Math.max(1, st.clientWidth); osH = Math.max(1, st.clientHeight);
+  const phone = osW < 700; TILT = (phone ? 28 : 32) * Math.PI / 180; TCOS = Math.cos(TILT); TSIN = Math.sin(TILT); tP = (phone ? 2.2 : 1.7) * osH;
+  const Ch = osH * tP / (tP * TCOS - osH * TSIN) + 2, Cw = osW * (tP + Ch * TSIN) / tP + 2;
+  cv.style.width = Cw + "px"; cv.style.height = Ch + "px"; cv.style.left = (osW - Cw) / 2 + "px"; cv.style.top = (osH - Ch) + "px";
+  cv.style.transform = `perspective(${tP}px) rotateX(${TILT}rad)`;
+  const dpr = Math.min(2, window.devicePixelRatio || 1); ocv.width = Math.round(osW * dpr); ocv.height = Math.round(osH * dpr);
+}
+const stRect = () => { const st = cv.parentElement, r = st.getBoundingClientRect(); return {left:r.left + st.clientLeft, top:r.top + st.clientTop, right:r.left + st.clientLeft + osW, bottom:r.top + st.clientTop + osH}; };   // inside the border
+function scr2cv(cx, cy) {   // a point on the screen -> css px on the (flat) map canvas
+  const r = stRect(), X = cx - (r.left + osW / 2), Y = cy - (r.top + osH);
+  const y = Y * tP / Math.max(1, tP * TCOS + Y * TSIN), s = tP / (tP - y * TSIN);
+  return {u:X / s + cssW / 2, v:y + cssH, r};
+}
+function cv2scr(u, v) {   // css px on the map canvas -> the point on the screen
+  const r = stRect(), x = u - cssW / 2, y = v - cssH, s = tP / (tP - y * TSIN);
+  return {x:r.left + osW / 2 + x * s, y:r.top + osH + y * TCOS * s, r};
+}
+const inStage = (q, pad = 0) => q.x > q.r.left + pad && q.x < q.r.right - pad && q.y > q.r.top + pad && q.y < q.r.bottom - pad;
+const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH * .55); return {x:c.u / cssW * W, y:c.v / cssW * W}; };   // screen centre in canvas units
 const dark = document.createElement("canvas"), dctx = dark.getContext("2d");
 const bg = document.createElement("canvas"), bctx = bg.getContext("2d");
 let sc = 1, cssW = 1, cssH = 1;
@@ -1014,19 +1043,19 @@ let sc = 1, cssW = 1, cssH = 1;
 let VZ = 1, VX = 0, VY = 0, bgV = {z:1, x:0, y:0};
 const VT = c => c.setTransform(sc * VZ, 0, 0, sc * VZ, -VX * sc * VZ, -VY * sc * VZ);
 function resize() {
-  const r = cv.getBoundingClientRect(); cssW = Math.max(1, r.width); cssH = Math.max(1, r.height);
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = dark.width = bg.width = Math.max(1, Math.round(r.width * dpr));
-  cv.height = dark.height = bg.height = Math.max(1, Math.round(r.height * dpr));
+  cssW = Math.max(1, cv.offsetWidth); cssH = Math.max(1, cv.offsetHeight);
+  const dpr = Math.min(2, window.devicePixelRatio || 1, Math.sqrt(3.2e6 / (cssW * cssH)));   // the leaned canvas is big: keep it light on phones
+  cv.width = dark.width = bg.width = Math.max(1, Math.round(cssW * dpr));
+  cv.height = dark.height = bg.height = Math.max(1, Math.round(cssH * dpr));
   sc = cv.width / W; fixView(); drawBg();
 }
 new ResizeObserver(resize).observe(cv);
 const VSH = () => W * cssH / cssW;
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
-const BZ = h => !h ? 6 : h.fac ? 12 : h.plot ? 7 : h.poly ? (h.w * h.h > 1400 ? 11 : 7) : 10;
+const BZ = h => !h ? 8 : h.fac ? 16 : h.plot ? 10 : h.poly ? (h.w * h.h > 1400 ? 15 : 10) : 14;
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
-const badgeK = () => clamp(668 / cssW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
-const ZMAX = 3.5, zMin = () => Math.min(1, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
+const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
+const ZMAX = 3.5, zMin = () => Math.min(.75, VSH() / VH());   // zoomed all the way out, the whole map fits on the screen
 const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
 function fixView() { VZ = clamp(VZ, zMin(), ZMAX); VX = fitV(VX, W, W / VZ); VY = fitV(VY, VH(), VSH() / VZ); }
 const canPan = () => W / VZ < W - .5 || VSH() / VZ < VH() - .5;
@@ -1308,7 +1337,7 @@ function slotAt(p, rad) {
   for (const s of slots) { const d = s.axis === "xy" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
   return best;
 }
-function toWorld(e) { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W / VZ + VX, y:(e.clientY - r.top) / r.height * VSH() / VZ + VY}; }
+function toWorld(e) { const c = scr2cv(e.clientX, e.clientY); return {x:c.u / cssW * W / VZ + VX, y:c.v / cssW * W / VZ + VY}; }
 const hitR = () => Math.max(22, 16 * W / cssW) / VZ;
 
 cv.addEventListener("pointerdown", e => {
@@ -1445,10 +1474,10 @@ document.addEventListener("pointermove", e => {
     ghost = document.createElement("div"); ghost.className = "ghost-lamp"; ghost.style.setProperty("--c", FIXTURES[pal.f].css); document.body.appendChild(ghost);
   }
   ghost.style.left = e.clientX + "px"; ghost.style.top = (e.clientY - 34) + "px";   // a bit above the finger so it stays visible
-  const r = cv.getBoundingClientRect(), cx = e.clientX, cy = e.clientY - 34;
+  const cx = e.clientX, cy = e.clientY - 34, cc = scr2cv(cx, cy), r = cc.r;
   const pd = S.pending;
   if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) { if (pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by); S.pending = null; msg(Tx("Prevuci svetiljku na mapu, pored ulice ili u park.")); return; }
-  const p = {x:(cx - r.left) / r.width * W / VZ + VX, y:(cy - r.top) / r.height * VSH() / VZ + VY}, sp = palSpot(p);
+  const p = {x:cc.u / cssW * W / VZ + VX, y:cc.v / cssW * W / VZ + VY}, sp = palSpot(p);
   if (sp !== pd && pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by);
   if (!sp) { S.pending = null; msg(MAP ? Tx("Ovde ne može: to su kuće i dvorišta. Lampa ide samo pored ulice ili u park, i samo se oni broje u Svetlo %.") : Tx("Ovde ne može: lampa ide pored ulice ili u park, ne preblizu druge lampe."), true); return; }
   S.pending = sp; S.sel = sp; if (!sp.lamp && sp !== tmp) moveSlot(sp, p.x, p.y);
@@ -2853,7 +2882,8 @@ function render() {
   }
   ctx.globalAlpha = 1;
   // badges (faded while choosing a lamp, so the top of the map stays clear)
-  const UK = badgeK(), UW = W / UK; ctx.setTransform(sc * UK, 0, 0, sc * UK, 0, 0);
+  ctx = octx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ocv.width, ocv.height);   // flat overlay: not leaned back
+  const osc = ocv.width / W, UK = badgeK(), UW = W / UK; ctx.setTransform(osc * UK, 0, 0, osc * UK, 0, 0);
   ctx.globalAlpha = S.tool ? (MAP ? .85 : .12) : 1;
   ctx.font = "600 13px Barlow, sans-serif"; ctx.textAlign = "left";
   const toneLine = d => { const t = districtTone(d); return t.tones.size === 0 ? null : t.tone ? [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: sve ${t.tone} svetlo +25%`, "#7ed39a"] : [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: mešano svetlo, bez bonusa`, "#f1c453"]; };
@@ -2874,7 +2904,7 @@ function render() {
   // the gang meter lives under the map (#gang), where it stays readable on any screen
   ctx.textAlign = "left";
   if (S.flashCd > 0) { ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly + 14, 130, 20); ctx.fillStyle = "#8f98ae"; ctx.font = "500 12px Barlow, sans-serif"; ctx.fillText(Tx("Baterija se puni…"), 16, ly + 28); }
-  VT(ctx);
+  ctx = ctx0; VT(ctx);
   ctx.globalAlpha = 1;
   if (S.mission && S.mission.type === "house" && S.phase === "night") { const h = houses[S.mission.house];
     if (h) { const ok = !S.mission.fail, pu = .6 + .4 * Math.sin(performance.now() / 250);
@@ -2895,19 +2925,21 @@ function render() {
     const ly2 = t.y < 40 ? t.y + 32 : t.y - 20, tw = ctx.measureText(lbl).width + 8;
     ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.fillRect(t.x - tw / 2, ly2 - 12, tw, 16); ctx.fillStyle = "#ffd84a"; ctx.fillText(lbl, t.x, ly2);
   }
-  { const k = Math.min(1, 640 / cssW), wk = W / k, hk = VSH() / k; ctx.setTransform(sc * k, 0, 0, sc * k, 0, 0);   // attribution stays on the screen, not on the map
+  ctx = octx;
+  { const k = Math.min(1, 640 / osW), wk = W / k, hk = W * osH / osW / k; ctx.setTransform(osc * k, 0, 0, osc * k, 0, 0);   // attribution stays on the screen, not on the map
   if (MAP) { ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "rgba(8,10,20,.7)"; ctx.fillRect(wk - 166, hk - 20, 160, 16); ctx.fillStyle = "#c9cfdb"; ctx.fillText(Tx("© OpenStreetMap saradnici"), wk - 10, hk - 8); ctx.textAlign = "left"; }
-  ctx.setTransform(sc * k, 0, 0, sc * k, (cv.width - W * sc * k) / 2, 0); }   // banners: a box in the middle of the screen, never wider than a phone screen
+  ctx.setTransform(osc * k, 0, 0, osc * k, (ocv.width - W * osc * k) / 2, 0); }   // banners: a box in the middle of the screen, never wider than a phone screen
   if (S.banner) {
     const b = S.banner; b.t += 1 / 60; const a = Math.min(1, b.t * 3, (5 - b.t) * 2);
     if (b.t > 5) S.banner = null; else {
-      const y0 = Math.round(Math.min(400, VSH() / Math.min(1, 640 / cssW) / 2 - 70));   // in the middle of the screen, however tall it is
+      const y0 = Math.round(Math.min(400, W * osH / osW / Math.min(1, 640 / osW) / 2 - 70));   // in the middle of the screen, however tall it is
       ctx.globalAlpha = Math.max(0, a); ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.fillRect(24, y0, W - 48, 140);
       ctx.strokeStyle = "#f1c453"; ctx.lineWidth = 2; ctx.strokeRect(24, y0, W - 48, 140);
       ctx.textAlign = "center"; ctx.fillStyle = "#f1c453"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(b.title, W / 2, y0 + 46);
       ctx.fillStyle = "#ece6d6"; ctx.font = "500 15px Barlow, sans-serif"; wrapText(b.sub, W / 2, y0 + 74, W - 80, 19); ctx.globalAlpha = 1; ctx.textAlign = "left";
     }
   }
+  ctx = ctx0;
 }
 function drawGang() {
   const G = S.gang, now = performance.now();
@@ -3012,7 +3044,7 @@ function fitStage() {
   else { wrapEl.style.height = ""; ah = wrapEl.getBoundingClientRect().height; }
   aw = Math.max(120, aw); ah = Math.max(120, ah);
   const w = mq.matches ? Math.floor(Math.min(aw, Math.max(ah * W / VH(), ah * 1.5))) : Math.floor(aw), h = mq.matches ? Math.floor(Math.min(ah, w * VH() / W)) : Math.floor(ah);   // computer: the whole free area
-  stageEl.style.width = w + "px"; stageEl.style.height = h + "px"; stageEl.style.aspectRatio = "";
+  stageEl.style.width = w + "px"; stageEl.style.height = h + "px"; stageEl.style.aspectRatio = ""; layoutTilt();
   lastVH = VH();
 }
 new ResizeObserver(fitStage).observe(wrapEl); mq.addEventListener("change", fitStage); addEventListener("resize", fitStage); fitStage();
@@ -3031,12 +3063,12 @@ $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
-  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W}), toWorld,
+  view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW}), toWorld, cv2scr, scr2cv,
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }};
 
 
 // ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
-const ZKEY = MAP ? "lightThemUp.zoom" : "lightThemUp.zoomQ2";
+const ZKEY = MAP ? "lightThemUp.zoom3" : "lightThemUp.zoomQ3";
 function setView(z, x, y) {
   VZ = z; VX = x; VY = y; fixView(); bgLater();
   try { localStorage.setItem(ZKEY, VZ.toFixed(2)); } catch (e) {}
@@ -3047,17 +3079,18 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
 {
   $("zoomBox").hidden = false;
   resize();
-  let z0 = MAP ? 1.6 : mq.matches ? 1 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW)); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
+  let z0 = (mq.matches ? .8 : Math.max(zMin(), Math.min(1, 1.6 * W / cssW))) * (MAP ? 1.4 : 1); try { const v = parseFloat(localStorage.getItem(ZKEY)); if (v > 0) z0 = v; } catch (e) {}
   VZ = z0; VX = (W - W / VZ) / 2; VY = MAP ? (VH() - VSH() / VZ) / 2 : 0; fixView(); drawBg();   // the invented quarter starts at the top, where the gang and the generator are
-  $("zIn").onclick = () => zoomAt(VZ * 1.35, W / 2, VSH() / 2);
-  $("zOut").onclick = () => zoomAt(VZ / 1.35, W / 2, VSH() / 2);
-  $("zFit").onclick = () => zoomAt(zMin(), W / 2, VSH() / 2);
+  const zc = z => { const c = scrCenterU(); zoomAt(z, c.x, c.y); };
+  $("zIn").onclick = () => zc(VZ * 1.35);
+  $("zOut").onclick = () => zc(VZ / 1.35);
+  $("zFit").onclick = () => zc(zMin());
   const stage = $("stage"), pts = new Map(); let pinch = null, pan = null, defer = null, replay = false;
   // In Borča a touch is held back until the finger lifts: a short tap acts like before, any drag only moves the map.
   // Only a touch right on the lamp you are placing goes through at once, so that lamp can still be dragged.
   const nearPending = e => { const pd = S.pending; if (!pd || pd.lamp || pd.job) return false; const p = toWorld(e); return Math.hypot(pd.x - p.x, pd.y - p.y) < hitR() * 1.6; };
   const fire = (type, d) => { replay = true; try { cv.dispatchEvent(new PointerEvent(type, {clientX:d.x, clientY:d.y, pointerId:d.id, pointerType:d.type, isPrimary:true, bubbles:true, cancelable:true})); } finally { replay = false; } };
-  const unit = e => { const r = cv.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width * W, y:(e.clientY - r.top) / r.height * VSH()}; };
+  const unit = e => { const c = scr2cv(e.clientX, e.clientY); return {x:c.u / cssW * W, y:c.v / cssW * W}; };
   stage.addEventListener("pointerdown", e => {
     if (e.target !== cv || replay) return;
     pts.set(e.pointerId, unit(e));
@@ -3157,9 +3190,10 @@ function tutShow() {
 function tutHand() {   // the pointing hand: on the target button, or on the map spot to tap
   const st = TUT[tut.i], h = $("tutHand"); let x = null, y = null; h.className = "tut-hand" + (st.hand ? " " + st.hand : "");
   const sp = st.spot && st.spot(), sc0 = st.scr && st.scr();
-  if (sc0) { const r = cv.getBoundingClientRect(); x = r.left + sc0.x * r.width / W; y = r.top + sc0.y * r.height / VSH(); } else
-  if (sp && canPan()) { const sx = (sp.x - VX) * VZ, sy = (sp.y - VY) * VZ; if (sx < 30 || sx > W - 30 || sy < 30 || sy > VSH() - 30) setView(VZ, sp.x - W / (2 * VZ), sp.y - VSH() / (2 * VZ)); }   // bring the spot into view
-  if (sp) { const r = cv.getBoundingClientRect(); x = r.left + (sp.x - VX) * VZ * r.width / W; y = r.top + (sp.y - VY) * VZ * r.height / VSH(); if (x < r.left || x > r.right || y < r.top || y > r.bottom) x = null; }
+  const spScr = sp => cv2scr((sp.x - VX) * VZ * cssW / W, (sp.y - VY) * VZ * cssW / W);
+  if (sc0) { const r = stRect(); x = r.left + sc0.x * osW / W; y = r.top + sc0.y * osW / W; } else
+  if (sp && !inStage(spScr(sp), 40)) { const c = scrCenterU(); setView(VZ, sp.x - c.x / VZ, sp.y - c.y / VZ); }   // bring the spot into view
+  if (sp) { const q = spScr(sp); x = q.x; y = q.y; if (!inStage(q)) x = null; }
   else if (st.el !== "cv") { const e0 = $(st.el), e = e0 && (e0.closest(".chip") || e0); if (e && e.offsetParent) { const r = e.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; } }
   h.hidden = x === null; if (x !== null) { h.style.left = x + "px"; h.style.top = y + "px"; }
   const needs = st.act || (st.actIf && sp); $("tutNext").hidden = !!needs && !st.last;
