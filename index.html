@@ -880,7 +880,10 @@ function drawBgMap(c) {
   c.font = "600 12px Barlow, sans-serif"; c.textAlign = "center"; const done = new Set();
   for (const g of MSEG.slice().sort((a, b) => b.len - a.len)) {
     if (!g.name || g.cl < 1 || done.has(g.name)) continue; const need = c.measureText(g.name).width + 30; if (g.len < need) continue;
-    const mx = (g.ax + g.bx) / 2, my = (g.ay + g.by) / 2; if (mx < 40 || mx > W - 40 || my < 40 || my > H - 40) continue;
+    let mx = 0, my = 0, ok = false;
+    for (const t of [.5, .38, .62, .26, .74]) { mx = g.ax + (g.bx - g.ax) * t; my = g.ay + (g.by - g.ay) * t; if (mx < 40 || mx > W - 40 || my < 40 || my > H - 40) continue;
+      if (lblFree(mx, my, (need - 30) / 2 * Math.max(Math.abs(proj(g.ux, g.uy).x), .4))) { ok = true; break; } }   // keep street names off the lamp badges
+    if (!ok) continue;
     done.add(g.name); let a = Math.atan2(g.uy, g.ux); if (a > Math.PI / 2) a -= Math.PI; if (a < -Math.PI / 2) a += Math.PI;
     c.save(); c.translate(mx, my); c.rotate(a); c.fillStyle = "rgba(236,230,214,.62)"; c.fillText(g.name, 0, 4); c.restore();
   }
@@ -890,7 +893,7 @@ function drawBgMap(c) {
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
-  c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177); c.restore();
+  c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, lblFree(GOFF.x + 29, GOFF.y + 177, 12) ? 177 : 132); c.restore();
   c.save(); c.translate(DEPR.x - 548, DEPR.y - 104);
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
@@ -1013,7 +1016,7 @@ let ctx = ctx0;
 // Two views: the angled top-down view (default) and the isometric view (?iso=1 or the ISO button): the map turned 45° into a diamond.
 // Both are one linear projection B (map units -> screen units), so taps map back exactly with unproj().
 const KY = .72;
-const ISO = (() => { try { const q = new URLSearchParams(location.search).get("iso"); if (q != null) localStorage.setItem("lightThemUp.iso", q === "1" ? "1" : ""); return !!localStorage.getItem("lightThemUp.iso"); } catch (e) { return false; } })();
+const ISO = (() => { try { const q = new URLSearchParams(location.search).get("iso"); if (q != null) localStorage.setItem("lightThemUp.view", q === "0" ? "flat" : "iso"); return localStorage.getItem("lightThemUp.view") !== "flat"; } catch (e) { return true; } })();   // isometric is the main view; the ISO button switches to the flat one and back
 const B = ISO ? [.7071, .3536, -.7071, .3536] : [1, 0, 0, KY];   // X = B0 x + B2 y, Y = B1 x + B3 y
 const BDET = B[0] * B[3] - B[1] * B[2];
 const proj = (x, y) => ({x:B[0] * x + B[2] * y, y:B[1] * x + B[3] * y});
@@ -1064,6 +1067,10 @@ new ResizeObserver(resize).observe(cv);
 const VSH = () => pbox().w * cssH / cssW;   // projected units visible top to bottom at VZ = 1
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
 const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) * (ISO ? 1.5 : 1);   // building height, screen units: walls stand up toward the viewer
+// Map labels stay clear of the lamp badges (checked on the screen, so it works in both views).
+function lblFree(x, y, hw) { const p = proj(x, y); return slots.every(sl => { const q = proj(sl.x, sl.y), d = q.y - p.y; return Math.abs(q.x - p.x) > hw + 46 || d <= -16 || d >= 30; }); }
+function lblSpot(x, y, hw, tries = [[0, 0], [0, 22], [0, -34], [-50, 0], [50, 0], [0, 40], [0, -52], [-50, 22], [50, 22]]) { const p = proj(x, y);   // moves are on the screen
+  for (const [dx, dy] of tries) { const q = unproj(p.x + dx, p.y + dy); if (lblFree(q.x, q.y, hw)) return [q.x, q.y]; } return [x, y]; }
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
 const ZMAX = ISO ? 5 : 3.5, zMin = () => Math.min(1, VSH() / pbox().h);   // zoomed all the way out, the whole map fits on the screen
@@ -1097,7 +1104,7 @@ function drawBg() {
     c.fillStyle = "#24452a"; c.beginPath(); c.arc(tx, ty, tr, 0, 6.28); c.fill();
     c.fillStyle = "rgba(120,170,110,.18)"; c.beginPath(); c.arc(tx - tr * .3, ty - tr * .3, tr * .5, 0, 6.28); c.fill();
   }
-  c.fillStyle = "#cfd5df"; c.font = "700 13px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("PARK", px + pw / 2, py + ph / 2 + 4);
+  c.fillStyle = "#cfd5df"; c.font = "700 13px Barlow Condensed, sans-serif"; c.textAlign = "center"; { const [lx, ly] = lblSpot(px + pw / 2, py + ph / 2 + 4, 16); c.fillText("PARK", lx, ly); }
   // streets
   c.fillStyle = "#262a33";
   for (const x of VS) c.fillRect(x - ST/2, 0, ST, H);
@@ -1142,7 +1149,7 @@ function drawBg() {
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
   c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
-  c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, 177);
+  c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, lblFree(29, 177, 12) ? 177 : 132);
   // depot
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
@@ -2361,7 +2368,7 @@ const fillQ = (q, f) => { ctx.fillStyle = f; ctx.beginPath(); ctx.moveTo(q[0].x,
 // A whole vehicle. kind: car, taxi, police, truck, van. o = the object (for smooth turning), lights: "off" | "on" | "brake".
 function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
   const big = kind === "van" || kind === "truck", L0 = kind === "truck" ? 15 : kind === "van" ? 14 : 10, W0 = kind === "truck" ? 6.5 : kind === "van" ? 7 : 5;
-  const k = vSize(L0), L = L0 * k, Wd = W0 * k, a = o ? smoothAng(o, ang) : ang, c = Math.cos(a), s = Math.sin(a), Z = (ISO ? 1.35 : 1) * k;
+  const G = 1.3, k = G * vSize(L0 * G), L = L0 * k, Wd = W0 * k, a = o ? smoothAng(o, ang) : ang, c = Math.cos(a), s = Math.sin(a), Z = (ISO ? 1.35 : 1) * k;
   // layer 1: soft shadow on the road + wheels
   ctx.save(); ctx.translate(x + SHV.x * 3 * Z, y + SHV.y * 3 * Z); ctx.rotate(a); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.roundRect(-L - 1.5, -Wd - 1.5, 2 * L + 3, 2 * Wd + 3, 4 * k); ctx.fill(); ctx.restore();
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = "#0d0e12";
@@ -2397,6 +2404,13 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
     }});
 }
 const CAR_KIND = {hatch:"car", taxi:"taxi", police:"police", truck:"truck"};
+const ZLBL = {};
+function zoneLabelAt(k, r, tw) {   // the zone's name goes where no lamp badge sits on it
+  const key = k + "|" + Math.round(tw); if (ZLBL[key]) return ZLBL[key];
+  const cx = r[0] + r[2] / 2, c = [[cx, r[1] + r[3] - 10], [r[0] + tw / 2 + 8, r[1] + r[3] - 10], [r[0] + r[2] - tw / 2 - 8, r[1] + r[3] - 10], [cx, r[1] + r[3] - 34], [cx, r[1] + 18], [cx, r[1] + r[3] / 2]];
+  const free = ([x, y]) => lblFree(x, y, tw / 2);
+  return (ZLBL[key] = c.find(free) || c[0]);
+}
 function drawTraffic() {
   const night = S.phase === "night";
   for (const c of traffic) drawVehicle(c, c.x, c.y, c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), CAR_KIND[c.type] || "car", c.col, night ? (c.dark ? "brake" : "on") : "off");
@@ -2807,8 +2821,7 @@ function render() {
   for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];
     if (own && k === "ind" && S.phase === "day") for (const h of houses) if (h.fac) { const t = performance.now() / 900 + h.id; for (let i = 0; i < 3; i++) { const k2 = (t + i / 3) % 1; ctx.fillStyle = `rgba(200,205,215,${.35 * (1 - k2)})`; ctx.beginPath(); ctx.arc(h.x + h.w - 6 + k2 * 6, h.y + 3 - k2 * 18, 2.5 + k2 * 4, 0, 6.28); ctx.fill(); } }
     if (!own) { ctx.strokeStyle = "rgba(241,196,83,.28)"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]); ctx.strokeRect(r[0] + 2, r[1] + 2, r[2] - 4, r[3] - 4); ctx.setLineDash([]); }
-    ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, lx = r[0] + r[2] / 2, ly = r[1] + r[3] - 10;
-    uprightAt(ctx, lx, ly, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
+  }
   for (const r of rocks) { const k = r.t / r.dur; ctx.fillStyle = "#bbb"; ctx.beginPath(); ctx.arc(r.x + (r.tx - r.x) * k, r.y + (r.ty - r.y) * k - Math.sin(k * Math.PI) * 14, 2.2, 0, 6.28); ctx.fill(); }
 
   // darkness (strong at night, a light dusk tint by day)
@@ -2909,6 +2922,9 @@ function render() {
   for (const p of parts) { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, p.sz, p.sz); }
   ctx.globalAlpha = 1;
 
+  for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses
+    ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
+    uprightAt(ctx, lx, ly, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
   // labels: life % and mood face
   ctx.textAlign = "center"; ctx.font = "600 11px Barlow, sans-serif";
   for (const s of slots) {
@@ -2921,7 +2937,7 @@ function render() {
     else if (L.state === "burnt") { txt = "0%"; col = "#ff6b5b"; }
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
     else { txt = pct + "%"; col = pct > 50 ? "#9fe0b3" : pct > 20 ? "#f1c453" : "#ff6b5b"; }
-    const ty = s.y - 11, tw = ctx.measureText(txt).width + 8;
+    const ty = s.y - 11 - (vans.some(v => Math.abs(v.x - s.x) < 40 && Math.abs(v.y - s.y) < 40) ? (ISO ? 26 : 20) : 0), tw = ctx.measureText(txt).width + 8;   // a van at the lamp stays visible under the badge
     uprightAt(ctx, s.x, s.y, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(s.x - tw / 2 - 7, ty - 10, tw + 14, 13, 6.5); ctx.fill();
       ctx.fillStyle = col; ctx.fillText(txt, s.x - 7, ty);
       face(s.x + tw / 2, ty - 3.5, L.mood ?? moodOf(s, L.m)[0]); });
@@ -2943,8 +2959,9 @@ function render() {
     ctx.strokeStyle = "rgba(241,196,83,.14)"; ctx.lineWidth = 6;
     for (let x = -300; x < W; x += 28) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + 285, LOCK_Y); ctx.stroke(); }
     ctx.strokeStyle = "#8a7a4a"; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(0, LOCK_Y); ctx.lineTo(W, LOCK_Y); ctx.stroke(); ctx.setLineDash([]);
-    ctx.textAlign = "center"; ctx.fillStyle = "#ece6d6"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(Tx("STARI KVART"), W / 2, LOCK_Y + 34);
-    ctx.fillStyle = "#ffc882"; ctx.font = "500 17px Barlow, sans-serif"; ctx.fillText(Tx`Voli klasično svetlo · ${PLOT_COST} $ u Prodavnici`, W / 2, LOCK_Y + 60);
+    uprightAt(ctx, W / 2, LOCK_Y + 34, () => {   // both lines stand up together, so they never overlap
+      ctx.textAlign = "center"; ctx.fillStyle = "#ece6d6"; ctx.font = "700 32px Barlow Condensed, sans-serif"; ctx.fillText(Tx("STARI KVART"), W / 2, LOCK_Y + 34);
+      ctx.fillStyle = "#ffc882"; ctx.font = "500 17px Barlow, sans-serif"; ctx.fillText(Tx`Voli klasično svetlo · ${PLOT_COST} $ u Prodavnici`, W / 2, LOCK_Y + 60); });
   }
   ctx.textAlign = "center";
   for (const f of floats) {
@@ -3160,7 +3177,7 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
   $("zOut").onclick = () => zc(VZ / 1.35);
   $("zFit").onclick = () => zc(zMin());
   $("zIso").classList.toggle("on", ISO);   // try the isometric view: the page reloads in the other view, the game is saved
-  $("zIso").onclick = () => { try { save(); localStorage.setItem("lightThemUp.iso", ISO ? "" : "1"); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("iso"); location.replace(u.href); };
+  $("zIso").onclick = () => { try { save(); localStorage.setItem("lightThemUp.view", ISO ? "flat" : "iso"); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("iso"); location.replace(u.href); };
   const stage = $("stage"), pts = new Map(); let pinch = null, pan = null, defer = null, replay = false;
   // In Borča a touch is held back until the finger lifts: a short tap acts like before, any drag only moves the map.
   // Only a touch right on the lamp you are placing goes through at once, so that lamp can still be dragged.
