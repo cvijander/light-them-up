@@ -567,7 +567,7 @@ function scr2cv(cx, cy) { const r = stRect(); return {u:cx - r.left, v:cy - r.to
 function cv2scr(u, v) { const r = stRect(); return {x:r.left + u, y:r.top + v, r}; }
 const inStage = (q, pad = 0) => q.x > q.r.left + pad && q.x < q.r.right - pad && q.y > q.r.top + pad && q.y < q.r.bottom - pad;
 const scrCenterU = () => { const r = stRect(), c = scr2cv(r.left + osW / 2, r.top + osH / 2); return {x:c.u / cssW * pbox().w, y:c.v / cssW * pbox().w}; };   // screen centre in projected units
-const dark = document.createElement("canvas"), dctx = dark.getContext("2d");
+const dark = document.createElement("canvas"), dctx = dark.getContext("2d"), DKS = .5;
 const bg = document.createElement("canvas"), bctx = bg.getContext("2d"); upright(bctx);
 let sc = 1, cssW = 1, cssH = 1;
 // Map camera: VZ = zoom, VX/VY = projected point (proj()) at the top-left of the screen. At VZ = 1 the map fills the width of the screen.
@@ -577,8 +577,9 @@ const VT = c => { const k = sc * VZ; c.setTransform(k * B[0], k * B[1], k * B[2]
 function resize() {
   cssW = Math.max(1, cv.offsetWidth); cssH = Math.max(1, cv.offsetHeight);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = dark.width = Math.max(1, Math.round(cssW * dpr));
-  cv.height = dark.height = Math.max(1, Math.round(cssH * dpr));
+  cv.width = Math.max(1, Math.round(cssW * dpr));
+  cv.height = Math.max(1, Math.round(cssH * dpr));
+  dark.width = Math.max(1, Math.round(cv.width * DKS)); dark.height = Math.max(1, Math.round(cv.height * DKS));   // the night shade is soft, so half resolution looks the same and draws 4x faster
   bg.width = Math.round(cv.width * (1 + 2 * BGM)); bg.height = Math.round(cv.height * (1 + 2 * BGM));   // the map picture has a margin, so moving the map needs no redraw
   sc = cv.width / pbox().w; fixView(); drawBg();
 }
@@ -2372,7 +2373,7 @@ function render() {
   // darkness (strong at night, a light dusk tint by day)
   dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.globalCompositeOperation = "source-over"; dctx.clearRect(0, 0, dark.width, dark.height);
   dctx.fillStyle = `rgba(3,5,16,${S.dark.toFixed(3)})`; dctx.fillRect(0, 0, dark.width, dark.height);
-  VT(dctx); dctx.globalCompositeOperation = "destination-out";
+  VT(dctx); { const m = dctx.getTransform(); dctx.setTransform(m.a * DKS, m.b * DKS, m.c * DKS, m.d * DKS, m.e * DKS, m.f * DKS); } dctx.globalCompositeOperation = "destination-out";
   const lit = slots.filter(isLit);
   const hole = (x, y, r, a) => { const g = dctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(.6, `rgba(0,0,0,${.8 * a})`); g.addColorStop(1, "rgba(0,0,0,0)"); dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, r, 0, 6.28); dctx.fill(); };
   for (const s of lit) { const a = lampAlpha(s.lamp); s.lamp.fa = a; hole(s.x, s.y, lr(s), a); }
@@ -2388,7 +2389,7 @@ function render() {
     const g = dctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, 55), a = 1 - f.t / .5;
     g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(1, "rgba(0,0,0,0)"); dctx.fillStyle = g; dctx.fillRect(f.x - 60, f.y - 60, 120, 120);
   }
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(dark, 0, 0); VT(ctx);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(dark, 0, 0, cv.width, cv.height); VT(ctx);
   ctx.globalCompositeOperation = "lighter";
   const glow = (x, y, r, c, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${c},${.32 * a})`); g.addColorStop(.35, `rgba(${c},${.12 * a})`); g.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill(); };
   for (const s of lit) glow(s.x, s.y, lr(s), s.lamp.m.col, s.lamp.fa);
@@ -2895,8 +2896,9 @@ const CHIP_HELP = {hMoney:Tx("Novac: od njega kupuješ lampe, popravke i stvari 
 for (const id in CHIP_HELP) { const b = $(id), c = b && b.closest(".chip"); if (c) { c.style.cursor = "help"; c.addEventListener("click", () => msg(CHIP_HELP[id])); } }
 let last = performance.now(), uiT = 0;
 function frame(now) {
-  const dt = Math.min(.05, (now - last) / 1000); last = now;
-  step(S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run) ? 0 : dt);   // the game stands still while the tutorial explains
+  const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
+  const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
+  if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
   tutTick(dt);
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
