@@ -1398,7 +1398,7 @@ function dailyTick(dt) {   // checks the calendar now and then, so playing past 
   dailyGift();
 }
 // ---------- Goals panel (trophy button): daily tasks, and more tabs later ----------
-const GOAL_TABS = [{id:"daily", name:Tx("Dnevni zadaci"), draw:drawDaily}];
+const GOAL_TABS = [{id:"daily", name:Tx("Zadaci"), draw:drawDaily}, {id:"lv", name:Tx("Nivoi"), draw:drawLevels}];
 let glTab = "daily", glWasPaused = false;
 function goalsOpen(tab) {
   if (tab) glTab = tab; glWasPaused = S.paused; S.paused = true; setPauseLabel();
@@ -1426,6 +1426,46 @@ $("btnGoals").onclick = () => { SFX.click(); goalsOpen(); };
 $("glClose").onclick = goalsClose;
 $("goals").addEventListener("click", e => { if (e.target === $("goals")) goalsClose(); });
 goalsDot();
+// ---------- Levels: the invented quarter first, then real quarters (Borča, your own town), each one harder ----------
+// Level = 1 + the invented quarter fully lit (with the old quarter) + every automated real quarter.
+// Reaching a level puts a bonus in the bank, which you take into the next quarter you start.
+const LV_KEY = "lightThemUp.levels", LV_LOCK = {borca:false, city:false};   // locks: Borko decides (off for now)
+function lvGet() {
+  let d = null; try { d = JSON.parse(localStorage.getItem(LV_KEY) || "null"); } catch (e) {}
+  d = Object.assign({inv:false}, d && typeof d === "object" ? d : {});
+  if (!d.inv) { const g = invGoal(true); if (g >= 3) { d.inv = true; try { localStorage.setItem(LV_KEY, JSON.stringify(d)); } catch (e) {} } }   // older games that already finished it
+  return d;
+}
+function invGoal(saved) {   // how far the invented quarter got: 0 light it, 1 buy the old quarter, 2 light it all, 3 done
+  if (!MAP && !saved) return S.goal || 0;
+  try { const d = JSON.parse(localStorage.getItem("lightThemUp.save.v2") || "null"); return d && d.S ? d.S.goal || 0 : 0; } catch (e) { return 0; }
+}
+const lvNum = () => 1 + (lvGet().inv ? 1 : 0) + Object.keys(meta().auto).length;
+const lvBonus = n => 100 + 50 * Math.min(10, n - 2);   // level 2: 100 $, then +50 $ per level
+const lvOpen = k => !LV_LOCK[k] || lvGet().inv;
+function lvUp() {   // called right after a level is reached; returns the line for the banner
+  const n = lvNum(), b = lvBonus(n), m = meta(); m.bank = (m.bank || 0) + b; metaSave(m);
+  recSet(r => { r.level = Math.max(r.level || 1, n); });
+  return Tx`Nivo ${n}! Sledeći kvart počinješ sa +${b} $.`;
+}
+function drawLevels() {
+  const L = lvGet(), n = lvNum(), m = meta(), g = invGoal(), here = k => k === "inv" ? !MAP : k === "my" ? MAP && MAP.part === "my" : MAP && MAP.part !== "my";
+  const bq = BQ0.q.length, ba = Object.keys(m.auto).filter(k => BQ.q[k] && BQ.q[k].part !== "my").length;
+  const myq = CITYD ? CITYD.q.length : 0, ma = Object.keys(m.auto).filter(k => BQ.q[k] && BQ.q[k].part === "my").length;
+  const stage = [Tx("Osvetli kvart do 100%"), Tx("Kupi stari kvart u Prodavnici"), Tx("Osvetli i stari kvart do 100%"), Tx("Ceo kvart zasijao")][Math.min(3, g)];
+  const card = (k, num, title, sub, pct, done, btn, lock) => `<div class="gl-task lv${done ? " done" : ""}${lock ? " lock" : ""}"><div class="gl-tt"><span><em class="lv-n">${num}</em>${title}</span>${here(k) ? `<b class="lv-here">${Tx("Ovde si")}</b>` : ""}</div>` +
+    `<div class="gl-bar"><em style="width:${Math.round(pct * 100)}%"></em></div><small>${sub}</small>${btn && !here(k) && !lock ? `<button class="ghost lv-go" type="button" data-go="${k}">${btn}</button>` : ""}</div>`;
+  return `<div class="gl-gift"><span>${Tx`Nivo ${n}`}</span><small>${L.inv ? Tx("Svaki sledeći kvart je teži, a donosi više.") : Tx("Osvetli ceo izmišljeni kvart da pređeš na nivo 2.")}</small></div>` +
+    card("inv", "1", Tx("Izmišljeni kvart"), L.inv ? Tx("Gotovo! Ceo kvart zasijao.") : stage, L.inv ? 1 : g / 3, L.inv, Tx("Igraj ovde"), false) +
+    card("borca", "2+", Tx("Borča, prave ulice"), lvOpen("borca") ? Tx`Automatizovano kvartova: ${ba} od ${bq}. Kad kvart zasija, automatizuj ga u Prodavnici i otvara se susedni, teži.` : Tx("Zaključano: prvo osvetli ceo izmišljeni kvart."), ba / bq, ba >= bq, Tx("Izaberi kvart"), !lvOpen("borca")) +
+    card("my", "★", Tx("Tvoj grad"), !lvOpen("city") ? Tx("Zaključano: prvo osvetli ceo izmišljeni kvart.") : CITYD ? Tx`${esc(CITYD.name)}: automatizovano ${ma} od ${myq}.` : Tx("Upiši svoje mesto i igraj na pravim ulicama."), myq ? ma / myq : 0, myq && ma >= myq, CITYD ? Tx("Izaberi kvart") : Tx("Upiši grad"), !lvOpen("city")) +
+    `<p class="gl-note">${Tx("Svaki novi nivo donosi bonus koji nosiš u sledeći kvart.")}</p>`;
+}
+$("glBody").addEventListener("click", e => {
+  const b = e.target.closest(".lv-go"); if (!b) return; const k = b.dataset.go; goalsClose();
+  if (k === "inv") { goMap("fake"); return; }
+  openPicker(); if (k === "my") setTimeout(() => $("mapCity").click(), 50);
+});
 // ---------- Records: a few numbers that follow the player across games and towns ----------
 const REC_KEY = "lightThemUp.records";
 function recs() { try { return Object.assign({nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}, JSON.parse(localStorage.getItem(REC_KEY) || "{}")); } catch (e) { return {nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}; } }
@@ -1561,7 +1601,7 @@ function autoQuarter() {
   S.money -= autoCost(); S.led.buy += autoCost(); S.auto = true;
   const m = meta(), rate = Math.max(30, Math.round((S.lastPay || 80) * .4 / 5) * 5); S.autoRate = rate;
   const keep = Math.floor(S.money * .5); m.auto[MAP.id] = rate; m.bank = (m.bank || 0) + keep; S.money = 0; metaSave(m); SFX.win(); save();
-  recInc("auto"); banner(Tx`Kvart ${qNum(MAP)} radi sam!`, Tx`Donosi +${rate} $ svake zore dok igraš u drugim kvartovima. Pola novca (${m.bank} $) nosiš sa sobom, pola ostaje za održavanje. Sledeći kvart je teži.`);
+  recInc("auto"); const ln = lvUp(); banner(Tx`Kvart ${qNum(MAP)} radi sam!`, Tx`Donosi +${rate} $ svake zore dok igraš u drugim kvartovima. Pola novca (${m.bank} $) nosiš sa sobom, pola ostaje za održavanje. Sledeći kvart je teži.` + " " + ln);
   setTimeout(openPicker, 2600);
 }
 
@@ -1842,7 +1882,7 @@ function step(dt) {
     for (const s of slots) if (isOn(s)) key += s.id + ":" + Math.round(s.x) + ":" + Math.round(s.y) + ":" + Math.round(lr(s)) + ",";
     if (key !== coverKey) { coverKey = key; S.cover = computeCover(); }
     if (S.started && S.cover >= (MAP ? .9 : 1) && S.goal === 0) { S.goal = 1; S.money += 150; banner(MAP ? Tx("Kvart je rešen!") : Tx("Ceo kvart je osvetljen!"), MAP ? Tx`Bonus +150 $. U Prodavnici ga sad možeš automatizovati (${autoCost()} $): radi sam, a ti prelaziš u susedni kvart.` : Tx("Bonus +150 $. Sledeći cilj: kupi stari kvart.")); }
-    if (S.started && S.cover >= 1 && S.goal === 2) { S.goal = 3; S.money += 300; banner(Tx("Ceo prošireni kvart svetli!"), Tx("Bonus +300 $. Bravo, majstore rasvete!")); }
+    if (S.started && S.cover >= 1 && S.goal === 2) { S.goal = 3; S.money += 300; const w = lvGet(); let ln = ""; if (!w.inv) { w.inv = true; try { localStorage.setItem(LV_KEY, JSON.stringify(w)); } catch (e) {} ln = " " + lvUp(); setTimeout(() => goalsOpen("lv"), 4500); } banner(Tx("Ceo prošireni kvart svetli!"), Tx("Bonus +300 $. Bravo, majstore rasvete!") + ln); }
   }
   // houses: mood of their light and satisfaction that grows while lit
   const tone = {novi:districtTone("novi").bonus, stari:districtTone("stari").bonus};
