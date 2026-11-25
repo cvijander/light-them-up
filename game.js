@@ -135,7 +135,7 @@ const STAR_PERK = [Tx("Osnovni nivo"), Tx("Stanari plaćaju 5% više"), Tx("Tend
 const TARIFF = 1.4;   // expensive power night: +40%
 const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10 + Object.keys(S.mgr || {}).length * MGR_WAGE;   // paid every dawn
 
-const DEFAULTS = () => ({mgr:{}, money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
+const DEFAULTS = () => ({mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
   order:0, scared:0, broken:0, flashCd:0, spawnT:10, used:0, inc:0, cover:0, coverT:0, goal:0, banner:null,
   night:1, phase:"night", phaseT:NIGHT_LEN, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
@@ -515,7 +515,7 @@ let NOSAVE = false;   // set when this town was just parked, so a reload cannot 
 function save() {
   if (!S.started || NOSAVE) return;
   try {
-    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr"];
+    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv"];
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
@@ -900,7 +900,7 @@ function scare(h, quiet) {
   if (h.state === "flee") return false;
   h.state = "flee"; h.fear = 0; h.fy = ENTRIES.reduce((a, e) => Math.abs(e - h.y) < Math.abs(a - h.y) ? e : a) + rnd(-6, 6);
   if (quiet) return true;
-  S.scared++; misProg("scare"); dailyInc("scare");
+  S.scared++; misProg("scare"); dailyInc("scare"); if (S.ev && S.ev.type === "hoods") S.ev.n++;
   const G = S.gang;
   if (h.x >= TURF_X && h.x < W && h.y > 0 && h.y < boundY()) {
     const z = zones.find(z => Math.hypot(z.x - h.x, z.y - h.y) < 60);
@@ -1831,6 +1831,7 @@ function step(dt) {
       if (S.big) { S.big = false;
         if (S.bigBroke <= 5) { const bonus = Math.round(Math.max(150, .5 * (S.led.pay || 0)) / 10) * 10; S.money += bonus; S.led.bounty += bonus; bigLine = Tx` Preživeo si Veliku noć: +${bonus} $!`; SFX.win(); }
         else bigLine = Tx` Velika noć: razbijeno ${S.bigBroke} lampi, bez nagrade.`; }
+      const evLine = evDawn(); S.nextEv = evPick(S.night + 1);
       if (MAP) { const ai = autoIncome(); if (ai) { const up = Math.round(ai * Math.min(.5, .1 + .06 * BL) + (Math.random() < .2 ? ai * .4 : 0)); S.money += ai - up; S.led.auto = ai - up; S.autoUp = up; } }
       const L = S.led, r = v => Math.round(v);
       const net = r(L.pay + L.bounty + (L.obj || 0) + (L.ten || 0) + (L.auto || 0) - L.fuel - L.buy - (L.wage || 0) - (L.theft || 0) - (L.mis || 0));
@@ -1843,7 +1844,7 @@ function step(dt) {
       refls = []; S.patrol = null; S.calm = 0;
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
       S.dawn = {night:S.night, net, day:Math.round(S.dayRate * DAY_LEN), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
-        notes:[misLine, bigLine, tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
+        notes:[misLine, bigLine, evLine, S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
       dailyInc("night"); { const dd = dailyGet(), nd = dd.tasks.filter(t => t.done).length; if (nd < dd.tasks.length) S.dawn.notes.push(Tx`Dnevni zadaci: gotovo ${nd} od ${dd.tasks.length}.`); }
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
@@ -1862,7 +1863,7 @@ function step(dt) {
       S.weather = S.night >= 3 ? (Math.random() < .2 ? "fog" : Math.random() < .2 ? "storm" : "") : ""; S.stormT = rnd(6, 10);
       if (S.weather) { S.banner.sub += " " + (S.weather === "fog" ? Tx("Magla: domet −25%") : Tx("Oluja: pazi na stare lampe")) + "."; if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } }
       S.mission = newMission(); if (S.mission) { S.banner.sub += " " + misText(S.mission); S.msgT = 0; }
-      S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0;
+      S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0; evStart();
       if (S.big) {
         banner(Tx`VELIKA NOĆ ${S.night}!`, Tx`Banda i lopovi napadaju duplo jače. Ako do zore ostane najviše 5 razbijenih lampi, dobijaš veliku nagradu.${S.mission ? " " + misText(S.mission) : ""}`);
         SFX.alarm(); S.thiefT *= .5; S.spawnT = 2; if (!S.gang.gone) { S.gang.rage = Math.min(100, S.gang.rage + 20); spawnHood(false); spawnHood(false); }
@@ -1904,7 +1905,7 @@ function step(dt) {
   S.sat = n ? satSum / n : 0;
   const active = hoods.filter(h => h.state !== "flee").length;
   if (S.phase === "night") {
-    const pay = Math.max(0, val - active * .2), fuel = used * FUEL_PER_POWER * (S.solar ? .7 : 1) * (1 - repDiscount()) * (S.tariff || 1);
+    const pay = Math.max(0, val - active * .2) * (S.ev && S.ev.type === "holiday" ? 1.3 : 1), fuel = used * FUEL_PER_POWER * (S.solar ? .7 : 1) * (1 - repDiscount()) * (S.tariff || 1);
     S.nightVal += pay * dt; S.nightN += dt;
     S.money += pay * dt; S.led.pay += pay * dt;
     S.money = Math.max(0, S.money - fuel * dt); S.led.fuel += fuel * dt;
@@ -1962,7 +1963,7 @@ function step(dt) {
   if (S.phase === "night" && S.night >= GANG_N && S.calm <= 0 && !G.gone) {
     S.spawnT -= dt;
     if (S.spawnT <= 0) {
-      S.spawnT = Math.max(6, 16 - (S.night - 2) * 1.5) * (60 / Math.max(15, G.presence)) * (1 - G.rage / 200) * (S.unlocked ? .85 : 1) * (S.big ? .5 : 1) / Math.min(2.2, 1 + .3 * BL);
+      S.spawnT = Math.max(6, 16 - (S.night - 2) * 1.5) * (60 / Math.max(15, G.presence)) * (1 - G.rage / 200) * (S.unlocked ? .85 : 1) * (S.big ? .5 : 1) * (S.ev && S.ev.type === "hoods" ? .4 : 1) / Math.min(2.2, 1 + .3 * BL);
       if (G.rage > 50) {
         G.rage -= 20; spawnHood(true); spawnHood(true);
         if (!S.tips.revenge) tip("revenge", Tx("Banda je besna!"), Tx("Previše si ih terao, pa dolaze u osvetu: po dvojica, brži i jače bacaju. Ako ih opet oteraš, bes i prisustvo im padaju."));
@@ -1971,9 +1972,9 @@ function step(dt) {
     }
   }
   for (const h of hoods) updateHood(h, dt);
-  if (S.phase === "night" && S.night >= 2 && dt > 0) { S.thiefT -= dt; if (S.thiefT <= 0) { S.thiefT = rnd(18, 30) * (S.gang.gone ? .8 : 1) * (S.mission && S.mission.type === "thief" && !S.mission.done ? .5 : 1) * (S.big ? .5 : 1); spawnThief(); } }
+  if (S.phase === "night" && S.night >= 2 && dt > 0 && !(S.ev && S.ev.type === "hoods")) { S.thiefT -= dt; if (S.thiefT <= 0) { S.thiefT = rnd(18, 30) * (S.gang.gone ? .8 : 1) * (S.mission && S.mission.type === "thief" && !S.mission.done ? .5 : 1) * (S.big ? .5 : 1); spawnThief(); } }
   for (const t of thieves) updateThief(t, dt);
-  if (dt > 0) { updateSensors(dt); updateSpots(dt); updateStorm(dt); }
+  if (dt > 0) { updateSensors(dt); updateSpots(dt); updateStorm(dt); evTick(); }
   if (dt > 0) { updateTraffic(dt); updatePeds(dt); autoDispatch(dt); if (S.tender && (S.tender.type === "park" || S.tender.type === "led")) checkTender(); }
   thieves = thieves.filter(t => !t.gone);
   hoods = hoods.filter(h => !h.gone);
@@ -2185,6 +2186,55 @@ function updateStorm(dt) {
   s.lamp.state = "broken"; SFX.smash(); burst(s.x, s.y, "#bfe3ff", 20, 120); float(s.x, s.y - 14, Tx("Kratki spoj!"), "#ff6b5b", true);
   msg(Tx("Oluja: kratki spoj na staroj lampi! Drži lampe iznad 50% veka."), true);
 }
+
+// ---------- Events: announced at dawn for the next night ----------
+// storm: a big storm, around midnight lightning knocks out many lamps in one part of the quarter;
+// holiday: everything must shine, residents pay +30% and at dawn enough light brings a big bonus (not enough costs reputation);
+// hoods: night of the hooligans, many more of them and no thieves, every one chased off pays +10 $ at dawn.
+// Never on a Big night (every 5th). From night 3, about one night in four; around Christmas and New Year holidays come more often.
+const EV_NAME = {storm:Tx("Velika oluja"), holiday:Tx("Praznik"), hoods:Tx("Noć huligana")};
+const EV_HOLI = () => MAP ? .85 : .95;   // light needed at dawn on a holiday
+function evPick(n) {   // the event for night n, or ""
+  if (n < 3 || n % 5 === 0) return "";
+  const d = new Date(), md = (d.getMonth() + 1) * 100 + d.getDate(), xmas = md >= 1224 || md <= 107;
+  if (Math.random() > (xmas ? .4 : .27)) return "";
+  const pool = ["storm", "holiday", "hoods"]; if (xmas) pool.push("holiday", "holiday");
+  if (S.gang.gone) pool.splice(pool.indexOf("hoods"), 1);
+  return pool[Math.random() * pool.length | 0];
+}
+function evStart() {   // at nightfall
+  const t = S.nextEv; S.nextEv = ""; S.ev = null;
+  if (!t || S.big || t === "hoods" && S.gang.gone) return;
+  S.ev = {type:t, n:0, at:rnd(28, 45), hit:false};
+  if (t === "storm") { S.weather = "storm"; S.stormT = 3; banner(Tx`${EV_NAME.storm}!`, Tx("Oko ponoći grom može da pogasi mnogo lampi u jednom delu kvarta. Ojačano staklo pomaže, a majstori i auto-dispečing brzo popravljaju.")); }
+  if (t === "holiday") banner(Tx`${EV_NAME.holiday}!`, Tx`Večeras sve mora da svetli. Stanari plaćaju 30% više, a ako u zoru bude bar ${Math.round(EV_HOLI() * 100)}% svetla, grad daje veliku nagradu.`);
+  if (t === "hoods") { banner(Tx`${EV_NAME.hoods}!`, Tx("Večeras dolazi mnogo više huligana, ali nema lopova. Svaki oteran huligan donosi +10 $ u zoru.")); S.thiefT = 9999; spawnHood(false); }
+  SFX.alarm();
+}
+function evTick() {   // during the night
+  const E = S.ev; if (!E || S.phase !== "night") return;
+  if (E.type === "storm" && !E.hit && S.phaseT < E.at) {
+    E.hit = true; S.lightning = 1; SFX.outage();
+    const parts = MGR_AREAS().map(([a, nm]) => [a, nm, slots.filter(s => s.lamp && s.lamp.state === "ok" && avail(s) && mgrArea(s) === a)]).filter(x => x[2].length);
+    if (!parts.length) return;
+    const [, nm, list] = parts.sort((x, y) => y[2].length - x[2].length)[Math.random() < .6 ? 0 : Math.random() * parts.length | 0];
+    let n = 0; for (const s of list) if (Math.random() < (s.lamp.glass ? .25 : .55)) { s.lamp.state = "broken"; s.lamp.hp = 0; n++; burst(s.x, s.y, "#bfe3ff", 10, 90); }
+    E.n = n; coverKey = "";
+    banner(Tx("Grom!"), n ? Tx`Oluja je pogasila lampi: ${n} (${nm}). Dodirni ih ili uzmi „Popravi / zameni sve“ u Prodavnici.` : Tx("Grom je udario, ali su lampe izdržale."));
+  }
+}
+function evDawn() {   // the result, at dawn; returns a line for the report
+  const E = S.ev; S.ev = null; if (!E) return "";
+  if (E.type === "holiday") {
+    if (S.cover >= EV_HOLI()) { const b = Math.round(Math.max(150, .6 * (S.led.pay || 0)) / 10) * 10; S.money += b; S.led.bounty += b; S.rep = Math.min(100, S.rep + 4); SFX.win(); recSet(r => { r.holi = (r.holi || 0) + 1; }); return Tx`Praznik je uspeo: kvart je sijao, grad daje +${b} $.`; }
+    S.rep = Math.max(0, S.rep - 3); return Tx`Praznik: bilo je samo ${Math.floor(S.cover * 100)}% svetla, stanari su razočarani (reputacija −3).`;
+  }
+  if (E.type === "hoods") { const b = 10 * E.n; S.money += b; S.led.bounty += b; recSet(r => { r.hoodNight = (r.hoodNight || 0) + 1; }); return Tx`Noć huligana: oterano ${E.n}, nagrada +${b} $.`; }
+  recSet(r => { r.storms = (r.storms || 0) + 1; });
+  return E.n ? Tx`Velika oluja je prošla. Pogašeno je bilo lampi: ${E.n}.` : Tx("Velika oluja je prošla bez štete.");
+}
+const evLabel = () => { const E = S.ev; if (S.phase === "day" && S.nextEv) return Tx`Noćas: ${EV_NAME[S.nextEv]}`; if (!E || S.phase !== "night") return "";
+  return E.type === "holiday" ? Tx`Praznik: svetlo ${Math.floor(S.cover * 100)}% od ${Math.round(EV_HOLI() * 100)}%` : E.type === "hoods" ? Tx`Noć huligana: oterano ${E.n}` : Tx("Velika oluja!"); };
 // ---------- Lamp add-ons and "fix everything" ----------
 function armAddon(kind) {
   const c = kind === "sensor" ? SENSOR_COST : GLASS_COST;
@@ -2794,7 +2844,7 @@ function render() {
   const sp = Math.round(S.sat * 100);
   const gl = MAP && S.goal >= 1 ? (S.auto ? Tx("Kvart radi sam") : Tx("Cilj: automatizuj kvart")) : S.goal === 0 ? Tx`Cilj: osvetli ceo kvart (${Math.floor(S.cover * 100)}%)` : S.goal === 1 ? Tx("Cilj: kupi stari kvart") : S.goal === 2 ? Tx`Cilj: osvetli i stari kvart (${Math.floor(S.cover * 100)}%)` : Tx("Svi ciljevi ispunjeni");
   const wl0 = S.phase === "night" && S.tariff > 1 ? Tx("Skupa struja +40%") : "";
-  const wl = S.phase === "night" && S.weather === "fog" ? Tx("Magla: domet −25%") : S.phase === "night" && S.weather === "storm" ? Tx("Oluja: pazi na stare lampe") : "";
+  const wl = evLabel() || (S.phase === "night" && S.weather === "fog" ? Tx("Magla: domet −25%") : S.phase === "night" && S.weather === "storm" ? Tx("Oluja: pazi na stare lampe") : "");
   const hl = S.phase === "day" ? Tx("Dan: popravke −50%") : S.patrol ? Tx("Patrola obilazi kvart…") : S.calm > 0 ? Tx`Mirno još ${fmtT(S.calm)}` : S.night < GANG_N ? Tx("Huligani dolaze od 2. noći") : BL && S.night === 1 && S.phase === "night" ? (MAP && MAP.part === "my" ? Tx`Težina ${BL + 1}: banda te već zna` : Tx`Težina Borče ${BL + 1}: banda te već zna`) : "";
   let ly;
   if (compact) {
