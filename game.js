@@ -140,7 +140,7 @@ const DEFAULTS = () => ({mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, sp
   night:1, phase:"night", phaseT:NIGHT_LEN, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
 let thieves = [], traffic = [], peds = [];
-const CARS = [{x:111, y:228, v:1, col:"#8a2f2f"}, {x:299, y:625, v:1, col:"#2f5a8a"}, {x:531, y:262, v:1, col:"#c9c9c9"}, {x:200, y:101, v:0, col:"#3d7a4a"}, {x:455, y:329, v:0, col:"#b88a2f"}, {x:240, y:601, v:0, col:"#5a3d7a"}];
+const CARS = [{x:119, y:228, v:1, col:"#8a2f2f"}, {x:291, y:625, v:1, col:"#2f5a8a"}, {x:539, y:262, v:1, col:"#c9c9c9"}, {x:200, y:109, v:0, col:"#3d7a4a"}, {x:455, y:321, v:0, col:"#b88a2f"}, {x:240, y:609, v:0, col:"#5a3d7a"}];   // parked at the kerb, half on the sidewalk, clear of the traffic lanes
 const THIEF = {work:7, steal:15, reward:20};
 const GANG_NAMES = [Tx("Banda"), Tx("Crni vukovi"), Tx("Noćne senke"), Tx("Gvozdene pesnice")];
 let slots = [], houses = [], vans = [], hoods = [], jobs = [], parts = [], rocks = [], floats = [], flashes = [], refls = [], zones = [];
@@ -167,6 +167,14 @@ const cl2 = (v, a, b) => Math.max(a, Math.min(b, v));
 const ptIn = (x, y, f) => { let c = false; for (let i = 0, j = f.length - 2; i < f.length; j = i, i += 2) { const xi = f[i], yi = f[i + 1], xj = f[j], yj = f[j + 1]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
 function segD(x, y, g) { const t = cl2((x - g.ax) * g.ux + (y - g.ay) * g.uy, 0, g.len), px = g.ax + g.ux * t, py = g.ay + g.uy * t; return {d:Math.hypot(x - px, y - py), t, x:px, y:py, side:Math.sign((x - g.ax) * -g.uy + (y - g.ay) * g.ux) || 1}; }
 const segPt = (g, t, off) => ({x:g.ax + g.ux * t - g.uy * off, y:g.ay + g.uy * t + g.ux * off});
+function curbCar(c) {   // a parked car goes to the kerb of its street, half on the sidewalk, so the traffic (lane 6 from the middle) passes it
+  // the kerb on the side where buildings rise away from the street (else a tall wall would be drawn over the car)
+  if (!MAP) { if (c.v) { const x0 = VS.reduce((b, x) => Math.abs(c.x - x) < Math.abs(c.x - b) ? x : b); c.x = x0 + 19 * (Math.sign(UPV.x) || Math.sign(c.x - x0)); } else { const y0 = HS_ALL.reduce((b, y) => Math.abs(c.y - y) < Math.abs(c.y - b) ? y : b); c.y = y0 + 19 * (Math.sign(UPV.y) || Math.sign(c.y - y0)); } return c; }
+  let best = null, bd = 1e9; for (const g of MSEG) { const o = segD(c.x, c.y, g); if (o.d < bd) { bd = o.d; best = [g, o]; } }
+  if (!best || bd > 60) return c; const [g, o] = best, t = cl2(o.t, Math.min(14, g.len / 2), Math.max(g.len - 14, g.len / 2)), off = Math.max(g.w / 2 + 2, 20), up = Math.sign(-g.uy * UPV.x + g.ux * UPV.y) || o.side;
+  for (const sd of [up, -up]) for (const lat of [off, off - 3, off + 4]) { const q = segPt(g, t, lat * sd); if (!inBld(q.x, q.y, 0)) { const a = Math.atan2(g.uy, g.ux); return Object.assign(c, {x:q.x, y:q.y, ang:Math.cos(a - (c.ang || 0)) >= 0 ? a : a + Math.PI}); } }
+  return c;
+}
 function onRoad(x, y, pad) { for (const g of MSEG) { if (Math.abs(x - (g.ax + g.bx) / 2) > g.len / 2 + 40 || Math.abs(y - (g.ay + g.by) / 2) > g.len / 2 + 40) continue; if (segD(x, y, g).d < g.w / 2 + pad) return true; } return false; }
 function inBld(x, y, pad = 0) { for (const b of BLD) if (x > b.x0 - pad && x < b.x1 + pad && y > b.y0 - pad && y < b.y1 + pad && (pad > 0 || ptIn(x, y, b.f))) return true; return false; }
 const inParkMap = (x, y) => PARKS.some(p => x > p.x0 && x < p.x1 && y > p.y0 && y < p.y1 && ptIn(x, y, p.f));
@@ -226,7 +234,7 @@ function buildMap() {
   GENP.x = MAP.gen[0]; GENP.y = MAP.gen[1]; GOFF.x = GENP.x - 6; GOFF.y = GENP.y - 100; DEPR.x = MAP.depot[0]; DEPR.y = MAP.depot[1];
   DEPOT.x = MAP.depotPt[0]; DEPOT.y = MAP.depotPt[1];
   MAP.spots.forEach((p, i) => { if (p && SPOTS[i]) { SPOTS[i].x = p[0]; SPOTS[i].y = p[1]; } });
-  CARS.length = 0; for (const [x, y, ang, col] of MAP.cars) CARS.push({x, y, v:0, ang, col});
+  CARS.length = 0; for (const [x, y, ang, col] of MAP.cars) CARS.push({x, y, v:0, ang, col}); CARS.curbed = false;
   // houses: real buildings inside the quarter, apartment blocks count more
   const roofs = ["#5a3b33", "#4b4f5c", "#5d4a36", "#3f4a45", "#6a4a3f", "#4a3e52"], flats = ["#6c6487", "#5f6b80", "#6e5f78"];
   let wsum = 0;
@@ -2741,6 +2749,7 @@ function render() {
     ctx.fillStyle = "#1b1c22"; ctx.beginPath(); ctx.arc(.8, -13.4 + b, 2.6, 0, 6.28); ctx.fill();   // dark face
     ctx.restore();
   });
+  if (!CARS.curbed) { CARS.curbed = true; CARS.forEach(curbCar); }   // once: move the parked cars to the kerb
   for (const c of CARS) {
     if (c.gone || (c.y > boundY())) continue;
     drawVehicle(null, c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, "car", c.col, "off");   // parked cars
