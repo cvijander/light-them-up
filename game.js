@@ -592,7 +592,13 @@ function lblSpot(x, y, hw, tries = [[0, 0], [0, 22], [0, -34], [-50, 0], [50, 0]
   for (const [dx, dy] of tries) { const q = unproj(p.x + dx, p.y + dy); if (lblFree(q.x, q.y, hw)) return [q.x, q.y]; } return [x, y]; }
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
-const ZMAX = ISO ? 5 : 3.5, zMin = () => Math.min(1, VSH() / pbox().h);   // zoomed all the way out, the whole map fits on the screen
+let CBX = null;   // projected bounds of the playable part (houses and lamp spots)
+function contentBox() { if (CBX) return CBX; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const add = (x, y) => { const q = proj(x, y); x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); };
+  if (!MAP) for (const h of houses) { add(h.x, h.y); add(h.x + h.w, h.y); add(h.x, h.y + h.h); add(h.x + h.w, h.y + h.h); }
+  for (const sl of slots) add(sl.x, sl.y); if (MAP) { add(GENP.x, GENP.y); add(DEPOT.x, DEPOT.y); x0 -= 60; x1 += 60; y0 -= 50; y1 += 40; }   // real maps: the lamp spots, generator and depot are the quarter
+  if (x1 < x0) return pbox(); return (CBX = {x0, y0, x1, y1, w:x1 - x0, h:y1 - y0}); }
+// zoomed all the way out: the whole map fits on the screen; in the isometric view the playable part fills the width (no big empty corners)
+const ZMAX = ISO ? 5 : 3.5, zMin = () => { const base = Math.min(1, VSH() / pbox().h); if (!ISO) return base; const C = contentBox(); return clamp(Math.max(pbox().w / (C.w * 1.04), VSH() / (C.h * 1.04)), base, 2.4); };   // fill the screen with the quarter (a tall phone pans sideways a little)
 const fitV = (v, size, view) => view >= size ? (size - view) / 2 : clamp(v, 0, size - view);   // a map smaller than the screen sits in the middle
 function fixView() { const P = pbox(); VZ = clamp(VZ, zMin(), ZMAX); VX = P.x0 + fitV(VX - P.x0, P.w, P.w / VZ); VY = P.y0 + fitV(VY - P.y0, P.h, VSH() / VZ); }
 const canPan = () => { const P = pbox(); return P.w / VZ < P.w - .5 || VSH() / VZ < P.h - .5; };
@@ -2325,11 +2331,17 @@ function render() {
     ctx.strokeStyle = "#7a8496"; ctx.lineWidth = 1.5; ctx.beginPath();
     ctx.moveTo(r.x, r.y); ctx.lineTo(r.x - 6, r.y + 7); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x + 6, r.y + 7); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x, r.y + 8); ctx.stroke();
   }
-  for (const h of hoods) uprightAt(ctx, h.x, h.y, () => {
-    const b = Math.sin(h.bob) * 1.2;
-    ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(h.x + 2, h.y + 7, 7, 3, 0, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#2b2d36"; ctx.beginPath(); ctx.arc(h.x, h.y + b, 7.5, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#1b1c22"; ctx.beginPath(); ctx.arc(h.x, h.y - 3 + b, 5, 0, 6.28); ctx.fill();
+  for (const h of hoods) uprightAt(ctx, h.x, h.y, () => {   // hooligans: a standing figure in a red hoodie with a light outline, never smaller than about 22 px
+    const b = Math.sin(h.bob) * 1.2, k = Math.max(1.5, 22 / (20 * pxPerU())), x = h.x, y = h.y;
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(1.5, 4, 7, 2.6, 0, 0, 6.28); ctx.fill();   // shadow
+    if (S.phase === "night") { ctx.fillStyle = "rgba(255,70,60,.18)"; ctx.beginPath(); ctx.arc(0, -6 + b, 12, 0, 6.28); ctx.fill(); }
+    ctx.lineWidth = 1.6 / k + .6; ctx.strokeStyle = "rgba(255,225,215,.85)";
+    ctx.fillStyle = "#1c1d24"; ctx.beginPath(); ctx.roundRect(-3.6, -3 + b, 3, 7, 1.2); ctx.roundRect(.6, -3 + b, 3, 7, 1.2); ctx.fill();   // legs
+    ctx.fillStyle = "#e0343e"; ctx.beginPath(); ctx.roundRect(-5.5, -11 + b, 11, 10, 3.5); ctx.fill(); ctx.stroke();   // hoodie
+    ctx.fillStyle = "#b8242d"; ctx.beginPath(); ctx.arc(0, -14 + b, 4.6, 0, 6.28); ctx.fill(); ctx.stroke();   // hood
+    ctx.fillStyle = "#1b1c22"; ctx.beginPath(); ctx.arc(.8, -13.4 + b, 2.6, 0, 6.28); ctx.fill();   // dark face
+    ctx.restore();
   });
   for (const c of CARS) {
     if (c.gone || (c.y > boundY())) continue;
@@ -2512,22 +2524,38 @@ function render() {
   const osc = ocv.width / W, UK = badgeK(), UW = W / UK; ctx.setTransform(osc * UK, 0, 0, osc * UK, 0, 0);
   ctx.globalAlpha = S.tool ? (MAP ? .85 : .12) : 1;
   ctx.font = "600 13px Barlow, sans-serif"; ctx.textAlign = "left";
+  const compact = UW < 520;   // phone: one thin row of small chips, so the map stays free
   const toneLine = d => { const t = districtTone(d); return t.tones.size === 0 ? null : t.tone ? [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: sve ${t.tone} svetlo +25%`, "#7ed39a"] : [Tx`${d === "novi" ? Tx("Kvart") : Tx("Stari kvart")}: mešano svetlo, bez bonusa`, "#f1c453"]; };
   const sp = Math.round(S.sat * 100);
-  const left = [toneLine(MAP ? DIST0 : "novi"), S.unlocked && !MAP ? toneLine("stari") : null, [Tx`Zadovoljstvo ${sp}% · nesrećni uz ${S.moodSad} lamp${S.moodSad === 1 ? "u" : "i"}`, sp > 60 ? "#7ed39a" : sp > 30 ? "#f1c453" : "#ff9d8f", true]].filter(Boolean);
-  left.forEach(([t, c, f], i) => { const w2 = ctx.measureText(t).width + 16 + (f ? 16 : 0); ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, 8 + i * 26, w2, 22); if (f) face(22, 19 + i * 26, sp > 60 ? 1 : sp > 30 ? 0 : -1); ctx.fillStyle = c; ctx.fillText(t, f ? 32 : 16, 24 + i * 26); });
-  const ly = 8 + left.length * 26;
-  ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly, 160, 8); ctx.fillStyle = S.cover > .95 ? "#7ed39a" : "#f1c453"; ctx.fillRect(9, ly + 1, 158 * S.cover, 6);
   const gl = MAP && S.goal >= 1 ? (S.auto ? Tx("Kvart radi sam") : Tx("Cilj: automatizuj kvart")) : S.goal === 0 ? Tx`Cilj: osvetli ceo kvart (${Math.floor(S.cover * 100)}%)` : S.goal === 1 ? Tx("Cilj: kupi stari kvart") : S.goal === 2 ? Tx`Cilj: osvetli i stari kvart (${Math.floor(S.cover * 100)}%)` : Tx("Svi ciljevi ispunjeni");
   const wl0 = S.phase === "night" && S.tariff > 1 ? Tx("Skupa struja +40%") : "";
   const wl = S.phase === "night" && S.weather === "fog" ? Tx("Magla: domet −25%") : S.phase === "night" && S.weather === "storm" ? Tx("Oluja: pazi na stare lampe") : "";
   const hl = S.phase === "day" ? Tx("Dan: popravke −50%") : S.patrol ? Tx("Patrola obilazi kvart…") : S.calm > 0 ? Tx`Mirno još ${fmtT(S.calm)}` : S.night < GANG_N ? Tx("Huligani dolaze od 2. noći") : BL && S.night === 1 && S.phase === "night" ? (MAP && MAP.part === "my" ? Tx`Težina ${BL + 1}: banda te već zna` : Tx`Težina Borče ${BL + 1}: banda te već zna`) : "";
+  let ly;
+  if (compact) {
+    ctx.font = "600 12px Barlow, sans-serif"; const chips = [];
+    const sc2 = sp > 60 ? "#7ed39a" : sp > 30 ? "#f1c453" : "#ff9d8f";
+    chips.push({w:ctx.measureText(sp + "%").width + 30, draw:(x, y) => { face(x + 12, y + 10, sp > 60 ? 1 : sp > 30 ? 0 : -1); ctx.fillStyle = sc2; ctx.fillText(sp + "%", x + 22, y + 15); }});   // satisfaction
+    const tones = [MAP ? DIST0 : "novi", S.unlocked && !MAP ? "stari" : null].filter(Boolean).map(d => districtTone(d)).filter(t => t.tones.size);
+    for (const t of tones) { const ok = !!t.tone, tx = ok ? "+25%" : "0%"; chips.push({w:ctx.measureText(tx).width + 26, draw:(x, y) => { ctx.fillStyle = ok ? "#7ed39a" : "#f1c453"; ctx.beginPath(); ctx.arc(x + 10, y + 10, 3.5, 0, 6.28); ctx.fill(); ctx.fillText(tx, x + 18, y + 15); }}); }   // same light colour bonus
+    if (S.goal !== 0 && S.goal !== 2) { const t = gl; chips.push({w:ctx.measureText(t).width + 14, draw:(x, y) => { ctx.fillStyle = "#f1c453"; ctx.fillText(t, x + 7, y + 15); }}); }
+    const alert = [wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : "", hl].find(Boolean);
+    if (alert) chips.push({w:ctx.measureText(alert).width + 14, draw:(x, y) => { ctx.fillStyle = "#c9cfdb"; ctx.fillText(alert, x + 7, y + 15); }});
+    let x = 6, y = 6;
+    for (const c of chips) { if (x + c.w > UW - 6 && x > 6) { x = 6; y += 24; } ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(x, y, c.w, 20, 10); ctx.fill(); c.draw(x, y); x += c.w + 5; }
+    ly = y + 22; S.hudB = (y + 24) * UK;
+  } else {
+  const left = [toneLine(MAP ? DIST0 : "novi"), S.unlocked && !MAP ? toneLine("stari") : null, [Tx`Zadovoljstvo ${sp}% · nesrećni uz ${S.moodSad} lamp${S.moodSad === 1 ? "u" : "i"}`, sp > 60 ? "#7ed39a" : sp > 30 ? "#f1c453" : "#ff9d8f", true]].filter(Boolean);
+  left.forEach(([t, c, f], i) => { const w2 = ctx.measureText(t).width + 16 + (f ? 16 : 0); ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, 8 + i * 26, w2, 22); if (f) face(22, 19 + i * 26, sp > 60 ? 1 : sp > 30 ? 0 : -1); ctx.fillStyle = c; ctx.fillText(t, f ? 32 : 16, 24 + i * 26); });
+  ly = 8 + left.length * 26;
+  ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly, 160, 8); ctx.fillStyle = S.cover > .95 ? "#7ed39a" : "#f1c453"; ctx.fillRect(9, ly + 1, 158 * S.cover, 6);
   ctx.textAlign = "right";
   const rl = [gl, hl, wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : ""].filter(Boolean);
   const lw = left.map(([t, c, f]) => ctx.measureText(t).width + 16 + (f ? 16 : 0));   // on a narrow screen the right badges go under the left ones instead of over them
   const ro = rl.some((t, i) => ctx.measureText(t).width + 16 + (i < lw.length ? lw[i] : i === lw.length ? 160 : 0) + 24 > UW) ? ly + 14 - 8 : 0;
   S.hudB = Math.max(ly + 14, rl.length ? ro + 8 + rl.length * 26 : 0) * UK;   // where the top badges end (map width units), the banner goes under them
   rl.forEach((t, i) => { const w2 = ctx.measureText(t).width + 16; ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(UW - 8 - w2, ro + 8 + i * 26, w2, 22); ctx.fillStyle = i ? "#c9cfdb" : "#f1c453"; ctx.fillText(t, UW - 16, ro + 24 + i * 26); });
+  }
   // the gang meter lives under the map (#gang), where it stays readable on any screen
   ctx.textAlign = "left";
   if (S.flashCd > 0) { ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly + 14, 130, 20); ctx.fillStyle = "#8f98ae"; ctx.font = "500 12px Barlow, sans-serif"; ctx.fillText(Tx("Baterija se puni…"), 16, ly + 28); }
@@ -2590,8 +2618,8 @@ function drawGang() {
     // routes: open ones red and moving, closed ones grey
     const rs = routesNow(), open = rs.map(routeOpen);
     rs.forEach((r, i) => {
-      ctx.strokeStyle = open[i] ? "rgba(255,80,70,.42)" : "rgba(150,160,180,.22)"; ctx.lineWidth = open[i] ? 2.2 : 1.6;
-      ctx.setLineDash(open[i] ? [7, 9] : [3, 8]); ctx.lineDashOffset = open[i] ? -now / 50 : 0;
+      ctx.strokeStyle = open[i] ? "rgba(255,80,70,.24)" : "rgba(150,160,180,.14)"; ctx.lineWidth = open[i] ? 1.6 : 1.2;   // quiet, so the hooligans stand out more than their paths
+      ctx.setLineDash(open[i] ? [4, 11] : [3, 10]); ctx.lineDashOffset = open[i] ? -now / 50 : 0;
       ctx.beginPath(); r.pts.forEach(([x, y], k) => { const o = (i - 2) * 2.2; k ? ctx.lineTo(x + o, y + o) : ctx.moveTo(x + o, y + o); }); ctx.stroke();
     });
     ctx.setLineDash([]); ctx.lineDashOffset = 0;
@@ -2677,7 +2705,7 @@ function fitStage() {
   if (mq.matches) { wrapEl.style.height = ""; ah = wrapEl.getBoundingClientRect().height; }
   else { wrapEl.style.height = ""; ah = wrapEl.getBoundingClientRect().height; }
   aw = Math.max(120, aw); ah = Math.max(120, ah);
-  const w = mq.matches ? Math.floor(Math.min(aw, Math.max(ah * W / VH(), ah * 1.5))) : Math.floor(aw), h = mq.matches ? Math.floor(Math.min(ah, w * VH() / W)) : Math.floor(ah);   // computer: the whole free area
+  const w = mq.matches ? Math.floor(Math.min(aw, Math.max(ah * W / VH(), ah * 1.5))) : Math.floor(aw), h = mq.matches && !ISO ? Math.floor(Math.min(ah, w * VH() / W)) : Math.floor(ah);   // isometric: the map always takes all the free height (it zooms and pans)   // computer: the whole free area
   stageEl.style.width = w + "px"; stageEl.style.height = h + "px"; stageEl.style.aspectRatio = ""; layoutTilt();
   lastVH = VH();
 }
@@ -2725,7 +2753,7 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
   const zc = z => { const c = scrCenterU(); zoomAt(z, c.x, c.y); };
   $("zIn").onclick = () => zc(VZ * 1.35);
   $("zOut").onclick = () => zc(VZ / 1.35);
-  $("zFit").onclick = () => zc(zMin());
+  $("zFit").onclick = () => { const z = zMin(), C = ISO ? contentBox() : pbox(); setView(z, C.x0 + C.w / 2 - pbox().w / z / 2, C.y0 + C.h / 2 - VSH() / z / 2); try { localStorage.setItem(ZKEY, z); } catch (e) {} };   // whole quarter, centred
   $("zIso").classList.toggle("on", ISO);   // try the isometric view: the page reloads in the other view, the game is saved
   $("zIso").onclick = () => { try { save(); localStorage.setItem("lightThemUp.view", ISO ? "flat" : "iso"); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("iso"); location.replace(u.href); };
   const stage = $("stage"), pts = new Map(); let pinch = null, pan = null, defer = null, replay = false;

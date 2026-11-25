@@ -125,6 +125,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
 .gang.mad{border-color:var(--bad);box-shadow:0 0 12px -3px var(--bad)} .gang.mad #gangR{color:var(--bad)}
 .gang.gone{grid-template-columns:auto;color:var(--good)}
 @media (max-width:420px){.act.ref span{display:none}.act{padding:0 8px}.gang{padding:4px 6px;gap:3px 4px}}
+@media (max-width:520px){.act.ref b{display:none}.act.ref span{display:inline}.act.ref .act-ico{margin-right:2px}}   /* phone: floodlight is icon + price, so the tip next to it has room */
 .act{height:40px;border-radius:10px;border:1px solid #3b4a80;background:var(--panel);color:var(--ref);padding:0 10px;cursor:pointer;white-space:nowrap;font-weight:600;flex:0 0 auto}
 .act b{font-family:var(--display);font-size:16px;text-transform:uppercase;letter-spacing:.02em}
 .act span{font-size:12px;color:var(--muted)}
