@@ -737,6 +737,21 @@ function districtTone(d, extra) {   // extra: {slot, m} to test a placement
 }
 const repairCost = m => Math.ceil(m.repair * (S.phase === "day" ? .5 : 1) * (stars() >= 5 ? .8 : 1));
 const bulbCost = m => Math.ceil(m.bulbCost * (S.phase === "day" ? .5 : 1) * (stars() >= 5 ? .8 : 1));
+// Bulb wear: warnings at 40%, 20% and 15%. Replacing on time is cheaper; waiting until it burns out costs double.
+const wearLv = L => { const p = Math.ceil(L.life * 100); return L.state === "burnt" || p <= 0 ? 4 : p <= 15 ? 3 : p <= 20 ? 2 : p <= 40 ? 1 : 0; };
+const WEAR_F = [1, .8, 1.25, 1.5, 2], WEAR_COL = ["#9fe0b3", "#f1c453", "#ff9f43", "#ff6b5b", "#ff6b5b"];
+const wearName = lv => [Tx("dobra"), Tx("pazi, uskoro zamena"), Tx("zameni je"), Tx("hitna zamena"), Tx("izgorela")][lv];
+const swapCost = (L, m = L.m) => Math.ceil(bulbCost(m) * WEAR_F[wearLv(L)]);   // what a new bulb costs right now for this lamp
+const fixCost = L => L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : swapCost(L);
+let wearMsgT = 0;
+function wearWarn(s, lv) {
+  const L = s.lamp, c = swapCost(L);
+  float(s.x, s.y - 14, [Tx("Pazi: 40%"), Tx("Zameni: 20%"), Tx("Hitno: 15%")][lv - 1], WEAR_COL[lv]);
+  tip("wear", Tx("Sijalice se troše"), Tx("Na 40% zamena je 20% jeftinija. Ispod 20% skuplja je 25%, ispod 15% 50%, a izgorela duplo. Dodirni lampu da je zameniš."));
+  if (performance.now() < wearMsgT) return; wearMsgT = performance.now() + 6000;
+  msg(lv === 1 ? Tx`Sijalica je na 40%. Zameni je sad, na vreme je jeftinije: ${c} $.` : lv === 2 ? Tx`Sijalica je na 20%. Zamena sada ${c} $, kasnije još skuplje.` : Tx`Sijalica je na 15% i trepće! Hitna zamena ${c} $, a kad izgori, duplo.`, lv >= 2);
+  if (lv >= 2) SFX.err();
+}
 const inZone = (x, y) => zones.some(z => Math.hypot(z.x - x, z.y - y) < z.r);
 function routeOpen(r) {
   for (let i = 1; i < r.pts.length; i++) {
@@ -845,17 +860,17 @@ function tapSlot(s, direct) {
     S.pending = null; const L = s.lamp;
     if (!L) { msg(Tx("Sijalica ide u postojeću lampu. Za novo mesto izaberi svetiljku (Ulična, Klasični, Fenjer)."), true); return; }
     const nb = combo(L.m.f.id, S.bulb);
-    if (L.state === "broken") { msg(Tx`Svetiljka je razbijena. Servis je popravlja i stavlja sijalicu ${L.m.b.name}.`); order(s, "repair", L.m, repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0)); return; }
+    if (L.state === "broken") { msg(Tx`Svetiljka je razbijena. Servis je popravlja i stavlja sijalicu ${L.m.b.name}.`); order(s, "repair", L.m, fixCost(L)); return; }
     if (nb === L.m && L.state === "ok" && L.life >= .95) { msg(Tx`${L.m.f.name} već ima sijalicu ${nb.b.name} (${Math.ceil(L.life * 100)}%).`); return; }
-    order(s, "bulb", nb, bulbCost(nb)); return;
+    order(s, "bulb", nb, swapCost(L, nb)); return;
   }
   const tool = toolModel(), L = s.lamp;
   if (!L) { if (!tool) { S.pending = null; msg(s.zone === "park" ? Tx("Mesto u parku. Ovde ide fenjer.") : Tx("Prazno mesto. Izaberi lampu dole, pa dodirni ovde.")); return; } if (preview(s, tool, direct)) return; order(s, "install", tool, tool.cost); return; }
   if (tool && tool.f !== L.m.f) { if (preview(s, tool, direct)) return; order(s, "install", tool, tool.cost); return; }
   S.pending = null;
-  if (L.state === "broken") { order(s, "repair", L.m, repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0)); return; }
+  if (L.state === "broken") { order(s, "repair", L.m, fixCost(L)); return; }
   const nb = tool || L.m;
-  if (L.state === "burnt" || L.life < .95 || nb !== L.m) { order(s, "bulb", nb, bulbCost(nb)); return; }
+  if (L.state === "burnt" || L.life < .95 || nb !== L.m) { order(s, "bulb", nb, swapCost(L, nb)); return; }
   msg(Tx`${L.m.name} radi, ${Math.ceil(L.life * 100)}% veka. ${moodOf(s, L.m)[1]}`);
 }
 function tip(key, title, sub) { if (S.tips[key]) return; S.tips[key] = 1; banner(title, sub); }
@@ -1081,7 +1096,7 @@ function refreshTools() {
     const el = $("tool-b-" + b.id);
     el.innerHTML = Tx`<span class="tool-top"><span class="ico">${ICONS[b.id]}</span><span class="pct">${Math.round(b.rf * 100)}%</span></span><span class="nm"><span class="long">Sijalica ${b.name}</span><span class="short">${BULB_SHORT[b.id]}</span></span><span class="pr">${b.cost} $</span>
       <span class="tg">domet ${Math.round(b.rf * 100)}%</span><span class="rbar"><i style="width:${Math.round(b.rf / 1.2 * 100)}%"></i></span>
-      <span class="st">Struja ${b.power} · vek ${b.life}s. Izaberi, pa dodirni lampu na mapi: menja se samo sijalica, stub ostaje. Nove svetiljke takođe dobijaju ovu sijalicu.</span>`;
+      <span class="st">Struja ${b.power} · vek ${b.life}s. Izaberi, pa dodirni lampu na mapi: menja se samo sijalica, stub ostaje. Nove svetiljke takođe dobijaju ovu sijalicu.</span>`.replace(/<\/span>\s*$/, "<br>" + Tx("Zamena: na 40% veka 20% jeftinije, ispod 20% +25%, ispod 15% +50%, izgorela duplo.") + "</span>");
     el.setAttribute("aria-label", Tx`Sijalica ${b.name}, ${b.cost} $, domet ${Math.round(b.rf * 100)}%`); el.title = Tx`Sijalica ${b.name}`;
     el.setAttribute("aria-pressed", String(S.tool === "bulb" && S.bulb === b.id));
     el.classList.toggle("cur", S.tool !== "bulb" && S.bulb === b.id);
@@ -1615,7 +1630,7 @@ function updateUI() {
   if (s2 && s2.plot && !S.unlocked) html = Tx`<b>Stari kvart</b><br>Zaključano. Kupi ga u nadogradnjama.`;
   else if (s2 && s2.lamp) {
     const L = s2.lamp, [mood, why] = moodOf(s2, L.m);
-    const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${bulbCost(L.m)} $` : !L.powered ? Tx("bez struje, generator je pun") : "radi";
+    const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${fixCost(L)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${swapCost(L)} $ (duplo, jer je izgorela)` : !L.powered ? Tx("bez struje, generator je pun") : wearLv(L) ? Tx`radi, ${wearName(wearLv(L))}: dodir = nova sijalica ${swapCost(L)} $` : Tx("radi");
     html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`;
   } else if (s2) html = Tx`<b>${s2.zone === "park" ? Tx("Mesto u parku") : s2.district === "stari" ? Tx("Mesto u starom kvartu") : Tx("Prazno mesto na ulici")}</b><br>${toolModel() ? Tx`Dodir = radar, drugi dodir = montaža (${toolModel().name}, ${toolModel().cost} $)` : Tx("Izaberi svetiljku, pa dodirni ovde.")}`;
   else { const L = S.led, r = v => Math.round(v);
@@ -1700,7 +1715,7 @@ function step(dt) {
       refls = []; S.patrol = null; S.calm = 0;
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
       S.dawn = {night:S.night, net, day:Math.round(S.dayRate * DAY_LEN), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
-        notes:[misLine, bigLine, tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
+        notes:[misLine, bigLine, tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
     } else {
@@ -1728,6 +1743,7 @@ function step(dt) {
   }
   for (const s of slots) if (isLit(s)) {
     s.lamp.life -= dt / s.lamp.m.life;
+    { const lv = wearLv(s.lamp); if (s.lamp.warn == null) s.lamp.warn = lv; else if (lv > s.lamp.warn) { s.lamp.warn = lv; if (lv < 4) wearWarn(s, lv); } }
     if (s.lamp.life <= 0) { s.lamp.life = 0; s.lamp.state = "burnt"; SFX.fizz(); float(s.x, s.y - 14, Tx("Izgorela!"), "#ff6b5b"); }
   }
   S.coverT -= dt;
@@ -1793,8 +1809,8 @@ function step(dt) {
       if (v.t <= 0) {
         const j = v.job, s = j.slot;
         if (j.type === "install") { s.lamp = newLamp(j.m); const md = moodOf(s, j.m)[0]; float(s.x, s.y - 14, md > 0 ? Tx("Montirano, stanari srećni") : md < 0 ? Tx("Montirano, stanari nesrećni") : Tx("Montirano"), md < 0 ? "#ff9d8f" : "#7ed39a"); }
-        else if (j.type === "bulb") { s.lamp.m = j.m; s.lamp.life = 1; if (s.lamp.state === "burnt") s.lamp.state = "ok"; float(s.x, s.y - 14, Tx`Nova sijalica: ${j.m.b.name}`, "#7ed39a"); }
-        else { if (j.wb) s.lamp.life = 1; s.lamp.state = s.lamp.life > 0 ? "ok" : "burnt"; s.lamp.hp = LAMP_HP; float(s.x, s.y - 14, s.lamp.state === "ok" ? Tx("Popravljeno") : Tx("Popravljeno, fali sijalica"), s.lamp.state === "ok" ? "#7ed39a" : "#f1c453"); }
+        else if (j.type === "bulb") { s.lamp.m = j.m; s.lamp.life = 1; s.lamp.warn = 0; if (s.lamp.state === "burnt") s.lamp.state = "ok"; float(s.x, s.y - 14, Tx`Nova sijalica: ${j.m.b.name}`, "#7ed39a"); }
+        else { if (j.wb) { s.lamp.life = 1; s.lamp.warn = 0; } s.lamp.state = s.lamp.life > 0 ? "ok" : "burnt"; s.lamp.hp = LAMP_HP; float(s.x, s.y - 14, s.lamp.state === "ok" ? Tx("Popravljeno") : Tx("Popravljeno, fali sijalica"), s.lamp.state === "ok" ? "#7ed39a" : "#f1c453"); }
         burst(s.x, s.y, "rgb(" + s.lamp.m.col + ")", 14, 70); SFX.done();
         s.job = null; jobs.splice(jobs.indexOf(j), 1); v.job = null; v.state = "return"; v.path = route(v, v.home);
         save();
@@ -2056,8 +2072,8 @@ function applyAddon(s) {
   msg(kind === "sensor" ? Tx("Senzor ugrađen: lampa ne troši struju dok niko ne prođe, a huligane odmah plaši.") : Tx("Ojačano staklo: svetiljka sad trpi duplo više kamenica.")); save();
 }
 function fixList() {
-  return slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state !== "ok" || s.lamp.life < .2)).map(s => {
-    const L = s.lamp, cost = L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : bulbCost(L.m);
+  return slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state !== "ok" || wearLv(s.lamp) >= 2)).map(s => {
+    const L = s.lamp, cost = fixCost(L);
     return {s, type:L.state === "broken" ? "repair" : "bulb", cost};
   });
 }
@@ -2089,7 +2105,7 @@ function autoDispatch(dt) {
   S.dispT -= dt; if (S.dispT > 0) return; S.dispT = 1.5;
   const s = slots.find(s => s.lamp && !s.job && avail(s) && (s.lamp.state === "broken" || s.lamp.state === "burnt"));
   if (!s) return;
-  const L = s.lamp, cost = L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : bulbCost(L.m);
+  const L = s.lamp, cost = fixCost(L);
   if (S.money < cost + 20) return;   // keep a small reserve
   order(s, L.state === "broken" ? "repair" : "bulb", L.m, cost);
   msg(Tx`Auto-dispečing: servis sam kreće na ${L.state === "broken" ? "popravku" : Tx("zamenu sijalice")} (${cost} $).`);
@@ -2506,7 +2522,7 @@ function render() {
     if (L.state === "broken") { txt = Tx("razbijena"); col = "#ff6b5b"; }
     else if (L.state === "burnt") { txt = "0%"; col = "#ff6b5b"; }
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
-    else { txt = pct + "%"; col = pct > 50 ? "#9fe0b3" : pct > 20 ? "#f1c453" : "#ff6b5b"; }
+    else { const lv = wearLv(L); txt = pct + "%" + (lv >= 3 ? "!" : ""); col = WEAR_COL[lv]; }
     if (L.state === "ok" && L.powered) { ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(s.x - 9, s.y + 7, 18, 2.5); ctx.fillStyle = col; ctx.fillRect(s.x - 9, s.y + 7, 18 * L.life, 2.5); }
     const mood = L.mood ?? moodOf(s, L.m)[0], bad = L.state !== "ok" || !L.powered || pct <= 20 || mood < 0;
     if (far && s !== keep) { if (!bad || !L.powered) continue;   // far out: no power is already on the top bar
