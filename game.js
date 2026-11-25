@@ -516,7 +516,7 @@ function save() {
   if (!S.started || NOSAVE) return;
   try {
     const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate"];
-    const d = {v:3, zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
+    const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
     localStorage.setItem(SAVE_KEY, JSON.stringify(d));
@@ -1150,6 +1150,7 @@ $("upHeat").onclick = () => { S.heat = !S.heat; SFX.click(); if (S.heat) setShop
 $("upSensor").onclick = () => armAddon("sensor");
 $("upGlass").onclick = () => armAddon("glass");
 $("dawnOk").onclick = () => { $("dawn").hidden = true; };
+$("awayOk").onclick = () => { $("away").hidden = true; };
 $("upTrafo").onclick = () => { const c = TRAFO_COST[S.trafo || 0]; if (S.genLv >= 3 && c && S.money >= c) { S.money -= c; S.led.buy += c; S.trafo = (S.trafo || 0) + 1; SFX.buy(); msg(Tx`Nova trafostanica: kapacitet je sada ${genCap()}.`); save(); } };
 $("upSolar").onclick = () => { if (S.unlocked && !S.solar && S.money >= SOLAR_COST) { S.money -= SOLAR_COST; S.led.buy += SOLAR_COST; S.solar = true; SFX.buy(); msg(Tx`Solarni paneli: kapacitet ${genCap()}, struja 30% jeftinija.`); save(); } };
 $("upUps").onclick = () => { if (!S.ups && S.money >= UPS_COST) { S.money -= UPS_COST; S.led.buy += UPS_COST; S.ups = true; S.upsCharge = UPS_SEC; SFX.buy(); msg(Tx`UPS baterija: kad generator stane, svetla rade još ${UPS_SEC} sekundi.`); save(); } };
@@ -1164,8 +1165,8 @@ function begin() { MUSIC.start(); if (MAP) { const m = meta(); if (!m.started.in
 let saved = readSave();
 if (saved && saved.S) { $("btnStart").textContent = Tx`Nastavi igru (${saved.S.phase === "day" ? "dan" : "noć"} ${saved.S.night || 1})`; $("btnNew2").hidden = false; }
 $("btnStart").onclick = () => {
-  if (!S.started && saved) { let ok = false; try { ok = load(saved); } catch (e) {} saved = null;
-    if (ok) msg(Tx("Nastavljaš gde si stao.")); else { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} resetGame(); msg(Tx("Stara sačuvana igra je bila oštećena, pa kreće nova igra."), true); } }
+  if (!S.started && saved) { let ok = false; const saved0 = saved; try { ok = load(saved); } catch (e) {} saved = null;
+    if (ok) { msg(Tx("Nastavljaš gde si stao.")); setTimeout(() => awayReport(saved0.at), 400); } else { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} resetGame(); msg(Tx("Stara sačuvana igra je bila oštećena, pa kreće nova igra."), true); } }
   else if (!S.started) { msg(MAP ? Tx`${partName(MAP.part)}, kvart ${qNum(MAP)}: ${MAP.streets.slice(0, 2).join(", ")}. ${DIST0 === "stari" ? Tx("Stari kvart sa kućama: voli klasično, toplo svetlo.") : Tx("Kvart sa zgradama: voli modernu LED rasvetu.")}` : Tx("Izaberi lampu i dodirni prazno mesto. Razbijene lampe popravi dodirom.")); if (MAP) takeBank(); setTimeout(tutStart, 500); }
   begin();
 };
@@ -1538,7 +1539,8 @@ document.addEventListener("keydown", e => {
   else if (k) setTool(k); else if (e.key === "b" || e.key === "B") cycleBulb(); else if (e.key === "Escape") { setTool(null); S.addon = null; } else if (e.key === "h" || e.key === "H") { S.heat = !S.heat; }
   else if ((e.key === " " || e.key === "p" || e.key === "P") && S.started && ov.hidden) { e.preventDefault(); $("btnPause").click(); }
 });
-document.addEventListener("visibilitychange", () => { if (document.hidden) { save(); if (S.started && !S.paused) $("btnPause").click(); } });
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => { if (document.hidden) { hiddenAt = Date.now(); save(); if (S.started && !S.paused) $("btnPause").click(); } else if (hiddenAt && S.started) { const t = hiddenAt; hiddenAt = 0; awayReport(t); } });
 window.addEventListener("pagehide", save);
 
 const UP_ICO = {upCrane:"crane", upArmor:"armor", upInd:"factory", upCen:"center", upHeat:"heat", upFixAll:"fixall", upSensor:"sensor", upGlass:"glass", upDispatch:"dispatch", upLoan:"bank", upTender:"tender", upGen:"gen", upTrafo:"bolt", upSolar:"sun", upUps:"ups", upGenFix:"wrench", upVan:"van", upSpeed:"van", upPlot:"plot"};
@@ -2097,6 +2099,57 @@ function showDawn() {
     Tx`<div class="dn-r dn-sum"><span>Ukupno</span><b class="${D.net >= 0 ? "pos" : "neg"}">${D.net >= 0 ? "+" : "−"}${Math.abs(D.net)} $</b></div>`;
   el.querySelector(".dn-notes").innerHTML = [...D.notes, Tx`Danas stanari daju još oko ${D.day} $.`].map(t => Tx`<li>${t}</li>`).join("");
   el.hidden = false;
+}
+
+// ---------- "While you were away": a short report when the player comes back after 5+ minutes ----------
+// Residents keep paying, but less than when you play (60% of one night's pay per hour away), and at most 8 hours count.
+// Bulbs wear out a little, the gang breaks a few lamps, and auto-dispatch (if bought and on) fixes what it can afford.
+const AWAY_MIN = 300, AWAY_MAX = 8 * 3600, AWAY_RATE = .6;
+function awayReport(t0) {
+  const secs = (Date.now() - (+t0 || 0)) / 1000;
+  if (!t0 || !isFinite(secs) || secs < AWAY_MIN || !S.started) return;
+  const sec = Math.min(secs, AWAY_MAX), hrs = sec / 3600, nights = Math.min(3, hrs);   // wear and the gang act as if up to 3 nights passed
+  const lamps = slots.filter(s => s.lamp && avail(s)), ok0 = lamps.filter(s => s.lamp.state === "ok" && s.lamp.life > 0);
+  const share = lamps.length ? ok0.length / lamps.length : 0, noGen = S.genHp <= 0;
+  const pay = noGen ? 0 : Math.round((S.lastPay || 0) * AWAY_RATE * hrs * share);
+  const auto = MAP ? Math.round(autoIncome() * .5 * hrs) : 0;
+  S.money += pay + auto;
+  // wear: lit lamps lose life as if they shone half of each night
+  let burnt = 0;
+  for (const s of ok0) { const L = s.lamp; L.life = Math.max(0, L.life - nights * NIGHT_LEN * .5 / L.m.life); if (L.life <= 0) { L.state = "burnt"; burnt++; } }
+  // the gang: a few lamps get smashed (never more than 6, armoured and glass-covered ones hold better)
+  let smashed = 0;
+  const G = S.gang || {};
+  if (!G.gone && S.night >= 2) {
+    const want = Math.min(6, Math.ceil(ok0.length * .15), Math.round(nights * (1 + .5 * (G.lv || 1)) * (.6 + Math.random() * .6)));
+    const pool = ok0.filter(s => s.lamp.state === "ok").sort(() => Math.random() - .5);
+    for (const s of pool) { if (smashed >= want) break; if (Math.random() < (s.lamp.glass ? .5 : 0) + (s.lamp.m.armor > 1 ? .3 : 0)) continue; s.lamp.state = "broken"; s.lamp.hp = 0; smashed++; S.broken++; }
+  }
+  // auto-dispatch fixes what it can pay for (day prices), cheapest first
+  let fixed = 0, fixCost = 0;
+  if (S.dispatch && !S.dispOff) {
+    const todo = slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state === "broken" || s.lamp.state === "burnt")).map(s => {
+      const L = s.lamp, c = Math.ceil((L.state === "broken" ? L.m.repair + (L.life <= .05 ? L.m.bulbCost : 0) : L.m.bulbCost) * .5); return {s, c}; }).sort((a, b) => a.c - b.c);
+    for (const {s, c} of todo) { if (S.money < c) break; S.money -= c; fixCost += c; fixed++; const L = s.lamp; if (L.state === "broken" && L.life > .05) L.state = "ok"; else { L.life = 1; L.state = "ok"; } L.hp = LAMP_HP; }
+  }
+  const el = $("away"); if (!el) return;
+  const h = Math.floor(secs / 3600), mi = Math.floor(secs % 3600 / 60);
+  const dur = h >= 24 ? Tx`${Math.floor(h / 24)} d ${h % 24} h` : h ? Tx`${h} h ${mi} min` : Tx`${mi} min`;
+  const rows = [[Tx("Stanari su platili"), pay], [Tx("Automatizovani kvartovi"), auto], [Tx("Auto-dispečing popravke"), -fixCost]].filter(r => r[1] !== 0);
+  const net = pay + auto - fixCost, sg = v => (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString(LANG === "sr" ? "sr-RS" : "en-US") + " $";
+  el.querySelector(".dn-t").textContent = Tx`Dok te nije bilo (${dur})`;
+  el.querySelector(".dn-rows").innerHTML = rows.map(([k, v]) => `<div class="dn-r"><span>${k}</span><b class="${v >= 0 ? "pos" : "neg"}">${sg(v)}</b></div>`).join("") +
+    `<div class="dn-r dn-sum"><span>${Tx("Ukupno")}</span><b class="${net >= 0 ? "pos" : "neg"}">${sg(net)}</b></div>`;
+  const notes = [
+    noGen ? Tx("Generator je bio pokvaren, pa stanari nisu ništa platili. Servisiraj ga u Prodavnici.") : !pay && !(S.lastPay > 0) ? Tx("Stanari plaćaju tek kad odigraš bar jednu celu noć.") : "",
+    burnt ? Tx`Izgorelo je sijalica: ${burnt}.` : "",
+    smashed ? Tx`Huligani su razbili lampi: ${smashed}.` : !G.gone && S.night >= 2 ? Tx("Huligani nisu uspeli ništa da razbiju.") : "",
+    fixed ? Tx`Servis je sam popravio lampi: ${fixed}.` : "",
+    burnt + smashed - fixed > 0 ? Tx("Pokvarene lampe dodirni na mapi da ih popraviš.") : "",
+    secs > AWAY_MAX ? Tx("Računa se najviše 8 sati odsustva.") : "",
+    Tx("Dok nisi tu, zarada je manja nego kad igraš.")].filter(Boolean);
+  el.querySelector(".dn-notes").innerHTML = notes.map(t => `<li>${t}</li>`).join("");
+  $("dawn").hidden = true; el.hidden = false; coverKey = ""; SFX.coin(); save();
 }
 
 // ---------- Auto-dispatch: the crew goes out on its own to fix broken and burnt lamps ----------
