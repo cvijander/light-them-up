@@ -352,7 +352,7 @@ function spawnCarMap() {
   if (traffic.length >= MAX_CARS || XS.length < 2) return;
   const A = XS[Math.random() * XS.length | 0], far = XS.filter(x => x !== A && Math.hypot(x.x - A.x, x.y - A.y) > 220), pool = far.length ? far : XS.filter(x => x !== A), B = pool[Math.random() * pool.length | 0];
   if (!B) return; const p = mpath(A.inN, B.inN); if (!p) return;
-  const type = CAR_TYPES[Math.random() * CAR_TYPES.length | 0];
+  const type = pickCarType();
   const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" ? .8 : 1), honked:new Set(), lit:0, n:0,
     path:[{x:A.x, y:A.y}, ...p.map(i => MN[i]), {x:B.x, y:B.y}, B.out], i:0, bx:A.out.x, by:A.out.y, ang:0, lane:6};
   movePath(c, 0); traffic.push(c);
@@ -1832,11 +1832,12 @@ function step(dt) {
 // ---------- Live traffic: cars drive the streets, use high beams in the dark, honk at hooligans ----------
 const CAR_COLS = ["#b8bec7", "#2f4a78", "#7a2e3a", "#4a4f58", "#8c8f94"];   // muted, so the lamps and the van stand out
 const CAR_TYPES = ["hatch", "hatch", "hatch", "taxi", "truck", "police"];
+function pickCarType() { return S.zInd && Math.random() < .4 ? "truck" : CAR_TYPES[Math.random() * CAR_TYPES.length | 0]; }   // industry bought: more trucks (~50% vs ~17%)
 function spawnCar() {
   if (traffic.length >= MAX_CARS) return;
   if (MAP) return spawnCarMap();
   const by = boundY(), vert = Math.random() < .5, dir = Math.random() < .5 ? 1 : -1;
-  const type = CAR_TYPES[Math.random() * CAR_TYPES.length | 0];
+  const type = pickCarType();
   const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" ? .8 : 1), dir, vert, honked:new Set(), lit:0, n:0};
   if (vert) { const x = VS[Math.random() * VS.length | 0]; c.x = x + (dir > 0 ? -5 : 5); c.y = dir > 0 ? -20 : by + 20; }
   else { const ys = hs(), y = ys[Math.random() * ys.length | 0]; c.y = y + (dir > 0 ? 5 : -5); c.x = dir > 0 ? -20 : W + 20; }
@@ -1902,7 +1903,7 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
   // layer 1: soft shadow on the road + wheels
   ctx.save(); ctx.translate(x + SHV.x * 3 * Z, y + SHV.y * 3 * Z); ctx.rotate(a); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.roundRect(-L - 1.5, -Wd - 1.5, 2 * L + 3, 2 * Wd + 3, 4 * k); ctx.fill(); ctx.restore();
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = "#0d0e12";
-  for (const sx of [-.6, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(L * sx, sy * (Wd - .3 * k), 2.6 * k, 1.5 * k, 0, 0, 6.28); ctx.fill(); }
+  if (Math.abs(-s * VDN.x + c * VDN.y) < .1) for (const sx of [-.6, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(L * sx, sy * (Wd - .3 * k), 2.6 * k, 1.5 * k, 0, 0, 6.28); ctx.fill(); }   // wheels on the road only when no side is in view (else the side wheels show, and these peeked out as extra wheels)
   ctx.restore();
   const night = lights !== "off", glass = "#1d2738", glassHi = "#5d7896";
   const wheels = (pts, us = [.2, .8]) => { for (const u of us) { const p = quadAt(pts, u, u, .12, .12)[0], r = 2.3 * Z; uprightAt(ctx, p.x, p.y, () => { ctx.fillStyle = "#101116"; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.28); ctx.fill(); ctx.fillStyle = "#6b7280"; ctx.beginPath(); ctx.arc(p.x, p.y, r * .42, 0, 6.28); ctx.fill(); }); } };   // wheels on the visible sides
