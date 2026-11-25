@@ -2697,11 +2697,16 @@ function drawRadar(s, m) {
   ctx.textAlign = "center";
   let bw = 0; for (const [t, , f] of lines) { ctx.font = f; bw = Math.max(bw, ctx.measureText(t).width); }
   bw += 34; const bh = 10 + lines.length * 17;
-  const bx = Math.min(W - 6 - bw / 2, Math.max(6 + bw / 2, s.x));
-  let by = s.y - rr - bh - 6; if (by < 60) by = s.y + rr + 6; if (by + bh > H - 4) by = Math.max(60, s.y - bh / 2);
-  ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.fillRect(bx - bw / 2, by, bw, bh);
-  face(bx - bw / 2 + 12, by + 15, mood);
-  lines.forEach(([t, c, f], i) => { ctx.font = f; ctx.fillStyle = c; ctx.fillText(t, bx + 8, by + 20 + i * 17 - (i ? 2 : 0)); });
+  // the card stands up above the ring (in ISO it lay flat on the ground before), kept inside the screen
+  const p0 = proj(0, 0), px1 = proj(1, 0), py1 = proj(0, 1), ry = rr * Math.hypot(px1.y - p0.y, py1.y - p0.y);   // ring's half height on screen
+  uprightAt(ctx, s.x, s.y, () => {
+    const m = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height, sx = v => m.a * v + m.e, sy = v => m.d * v + m.f, ux = q => (q - m.e) / m.a, uy = q => (q - m.f) / m.d;
+    const bx = Math.min(ux(cw) - 6 - bw / 2, Math.max(ux(0) + 6 + bw / 2, s.x)), top = uy(ch * .09);
+    let by = s.y - ry - bh - 6; if (by < top) by = s.y + ry + 6; if (sy(by + bh) > ch - 4) by = Math.max(top, s.y - bh / 2);
+    ctx.fillStyle = "rgba(8,10,20,.9)"; ctx.beginPath(); ctx.roundRect(bx - bw / 2, by, bw, bh, 6); ctx.fill();
+    face(bx - bw / 2 + 12, by + 15, mood);
+    lines.forEach(([t, c, f], i) => { ctx.font = f; ctx.fillStyle = c; ctx.fillText(t, bx + 8, by + 20 + i * 17 - (i ? 2 : 0)); });
+  });
   ctx.textAlign = "left";
 }
 
