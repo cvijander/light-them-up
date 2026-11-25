@@ -1513,7 +1513,7 @@ function achCheck() {
   goalsDot();
 }
 let achT = 0, xmasOn = false;
-function achTick(dt) { achT -= dt; if (achT > 0) return; achT = 4; xmasOn = LOOK.lights && lightsOpen(); if (S.started) achCheck(); }
+function achTick(dt) { achT -= dt; if (achT > 0) return; achT = 4; xmasOn = LOOK.lights && lightsOpen(); if (S.started && !tut) achCheck(); }   // no medal banners during the tutorial
 function drawMedals() {
   const d = achGet(), n = Object.keys(d.got).length; d.seen = true; try { localStorage.setItem(ACH_KEY, JSON.stringify(d)); } catch (e) {}
   return `<div class="gl-gift"><span>${Tx`Medalje: ${n} od ${ACH.length}`}</span></div><div class="md-grid">` +
@@ -1991,7 +1991,7 @@ function step(dt) {
     }
     if (v.state === "drive" || v.state === "return") {
       let st = spd * dt;
-      if (v.path.length && v.va != null) { const q = v.path[0], d = Math.atan2(q.y - v.y, q.x - v.x) - v.va; if (Math.hypot(q.x - v.x, q.y - v.y) > 2 && Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) > 1.2) st = 0; }   // a sharp turn (leaving the depot, U-turn): turn on the spot first, don't spin while driving
+      if (v.path.length && v.va != null) { const q = v.path[0], d = Math.atan2(q.y - v.y, q.x - v.x) - v.va; const dd = Math.atan2(Math.sin(d), Math.cos(d)); if (Math.hypot(q.x - v.x, q.y - v.y) > 2 && Math.abs(dd) > 1.2) { st = 0; v.ang = v.va + dd; v.va += Math.sign(dd) * Math.min(Math.abs(dd), 4 * dt); } }   // a sharp turn (leaving the depot, U-turn): turn on the spot first, don't spin while driving. It turns here in the simulation (it used to wait for the drawing, and a van whose heading never changed stood still forever)
       while (st > 0 && v.path.length) {
         const q = v.path[0], dx = q.x - v.x, dy = q.y - v.y, d = Math.hypot(dx, dy);
         if (d > .01) v.ang = Math.atan2(dy, dx);
@@ -3260,11 +3260,11 @@ function tutHand() {   // the pointing hand: on the target button, or on the map
   const sp = st.spot && st.spot(), sc0 = st.scr && st.scr();
   const spScr = sp => { const q = proj(sp.x, sp.y), f = VZ * cssW / pbox().w; return cv2scr((q.x - VX) * f, (q.y - VY) * f); };
   if (sc0) { const r = stRect(); x = r.left + sc0.x * osW / W; y = r.top + sc0.y * osW / W; } else
-  if (sp && !inStage(spScr(sp), 40)) { const c = scrCenterU(); setView(VZ, sp.x - c.x / VZ, sp.y - c.y / VZ); }   // bring the spot into view
+  if (sp && !inStage(spScr(sp), 40)) { const c = scrCenterU(), q = proj(sp.x, sp.y); setView(VZ, q.x - c.x / VZ, q.y - c.y / VZ); }   // bring the spot into view (the view works in projected units, so ISO needs proj)
   if (sp) { const q = spScr(sp); x = q.x; y = q.y; if (!inStage(q)) x = null; }
   else if (st.el !== "cv") { const e0 = $(st.el), e = e0 && (e0.closest(".chip") || e0); if (e && e.offsetParent) { const r = e.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; } }
   h.hidden = x === null; if (x !== null) { h.style.left = x + "px"; h.style.top = y + "px"; }
-  const needs = st.act || (st.actIf && sp); $("tutNext").hidden = !!needs && !st.last;
+  const needs = (st.act || (st.actIf && sp)) && (x !== null || st.el !== "cv"); $("tutNext").hidden = !!needs && !st.last;   // a map step whose spot cannot be shown gets a Next button, so the tutorial can never get stuck
 }
 function tutPos() {
   if (!tut) return; tutHand(); const id = TUT[tut.i].el, el0 = $(id), el = el0 && (el0.closest(".chip") || el0), box = $("tut"); if (!el) return;
