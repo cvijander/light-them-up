@@ -1373,7 +1373,7 @@ function dailyInc(k, amt = 1) {
   for (const t of d.tasks) if (t.k === k && !t.done) { t.p = Math.min(t.n, t.p + amt); if (t.p >= t.n) { t.done = true; won = t; } }
   dailySet(d);
   if (won) {
-    S.money += won.r; S.led.bounty += won.r; SFX.win(); d.seen = false; dailySet(d);
+    S.money += won.r; S.led.bounty += won.r; SFX.win(); d.seen = false; dailySet(d); recSet(r => { r.tasks = (r.tasks || 0) + 1; });
     const all = d.tasks.every(t => t.done);
     banner(Tx("Dnevni zadatak ispunjen!"), Tx`${DAILY_T[won.k].t(won.n)} · +${won.r} $.` + (all ? " " + Tx("Sva tri zadatka za danas su gotova. Novi stižu sutra.") : ""));
   }
@@ -1398,7 +1398,7 @@ function dailyTick(dt) {   // checks the calendar now and then, so playing past 
   dailyGift();
 }
 // ---------- Goals panel (trophy button): daily tasks, and more tabs later ----------
-const GOAL_TABS = [{id:"daily", name:Tx("Zadaci"), draw:drawDaily}, {id:"lv", name:Tx("Nivoi"), draw:drawLevels}];
+const GOAL_TABS = [{id:"daily", name:Tx("Zadaci"), draw:drawDaily}, {id:"lv", name:Tx("Nivoi"), draw:drawLevels}, {id:"md", name:Tx("Medalje"), draw:drawMedals}, {id:"lk", name:Tx("Ukrasi"), draw:drawLooks}];
 let glTab = "daily", glWasPaused = false;
 function goalsOpen(tab) {
   if (tab) glTab = tab; glWasPaused = S.paused; S.paused = true; setPauseLabel();
@@ -1421,7 +1421,7 @@ function drawDaily() {
     d.tasks.map(t => `<div class="gl-task${t.done ? " done" : ""}"><div class="gl-tt"><span>${DAILY_T[t.k].t(t.n)}</span><b>+${t.r} $</b></div><div class="gl-bar"><em style="width:${Math.round(t.p / t.n * 100)}%"></em></div><small>${t.done ? Tx("Gotovo, nagrada je isplaćena") : t.p + " / " + t.n}</small></div>`).join("") +
     `<p class="gl-note">${Tx`Novi zadaci za ${h} h ${mi} min.`} ${Tx("Zadaci važe u svim kvartovima i gradovima, a nagrada ide u kvart u kom igraš.")}</p>`;
 }
-function goalsDot() { const d = dailyGet(); $("btnGoals").classList.toggle("has", !d.seen); }
+function goalsDot() { const d = dailyGet(); $("btnGoals").classList.toggle("has", !d.seen || !achGet().seen); }
 $("btnGoals").onclick = () => { SFX.click(); goalsOpen(); };
 $("glClose").onclick = goalsClose;
 $("goals").addEventListener("click", e => { if (e.target === $("goals")) goalsClose(); });
@@ -1465,6 +1465,74 @@ $("glBody").addEventListener("click", e => {
   const b = e.target.closest(".lv-go"); if (!b) return; const k = b.dataset.go; goalsClose();
   if (k === "inv") { goMap("fake"); return; }
   openPicker(); if (k === "my") setTimeout(() => $("mapCity").click(), 50);
+});
+// ---------- Medals (kept for all quarters and towns) and decorations they unlock ----------
+const XMAS_C = ["#ff4d4d", "#4dff88", "#ffd84a", "#4da6ff"];
+const ACH_KEY = "lightThemUp.medals", LOOK_KEY = "lightThemUp.looks";
+const ACH = [
+  ["night1", Tx("Prva zora"), Tx("Dočekaj prvu zoru."), r => r.nights >= 1],
+  ["night10", Tx("Noćna smena"), Tx("Dočekaj 10 zora."), r => r.nights >= 10],
+  ["night50", Tx("Stari vuk"), Tx("Dočekaj 50 zora."), r => r.nights >= 50],
+  ["thief10", Tx("Hvatač lopova"), Tx("Uhvati 10 lopova."), r => r.thieves >= 10],
+  ["thief50", Tx("Šerif kvarta"), Tx("Uhvati 50 lopova."), r => r.thieves >= 50],
+  ["hood25", Tx("Baterijska lampa"), Tx("Oteraj 25 huligana."), r => r.hoods >= 25],
+  ["hood100", Tx("Strah i trepet"), Tx("Oteraj 100 huligana."), r => r.hoods >= 100],
+  ["cover100", Tx("Sve svetli"), Tx("Osvetli ceo kvart do 100%."), r => r.cover >= 100],
+  ["rep75", Tx("Ugledna firma"), Tx("Dostigni ugled 75."), r => r.rep >= 75],
+  ["big", Tx("Velika noć"), Tx("Preživi Veliku noć sa najviše 5 razbijenih lampi."), r => r.big >= 1],
+  ["storm", Tx("Posle oluje"), Tx("Preživi veliku oluju."), r => r.storms >= 1],
+  ["holi", Tx("Praznična rasveta"), Tx("Osvetli kvart za praznik."), r => r.holi >= 1],
+  ["hoodn", Tx("Noć huligana"), Tx("Preživi noć huligana."), r => r.hoodNight >= 1],
+  ["tasks10", Tx("Vredni radnik"), Tx("Ispuni 10 dnevnih zadataka."), r => r.tasks >= 10],
+  ["streak3", Tx("Verni majstor"), Tx("Igraj 3 dana zaredom."), r => r.streak >= 3],
+  ["streak7", Tx("Cela nedelja"), Tx("Igraj 7 dana zaredom."), r => r.streak >= 7],
+  ["lv2", Tx("Nivo 2"), Tx("Osvetli ceo izmišljeni kvart ili automatizuj pravi kvart."), (r, x) => x.lv >= 2],
+  ["lv5", Tx("Nivo 5"), Tx("Dođi do nivoa 5."), (r, x) => x.lv >= 5],
+  ["auto1", Tx("Kvart radi sam"), Tx("Automatizuj prvi pravi kvart."), r => r.auto >= 1],
+  ["auto5", Tx("Gradski majstor"), Tx("Automatizuj 5 kvartova."), r => r.auto >= 5],
+  ["city", Tx("Moj grad"), Tx("Igraj u svom gradu."), r => (r.cities || []).length >= 1],
+];
+const LOOKS = {   // [value, name, medal that unlocks it]
+  van:[["", Tx("Bela"), ""], ["#d94141", Tx("Crvena"), "thief10"], ["#2f6fd6", Tx("Plava"), "night10"], ["#2e9e5b", Tx("Zelena"), "hood25"], ["#f1b434", Tx("Zlatna"), "auto1"], ["#23262e", Tx("Crna"), "night50"]],
+  cap:[["", Tx("Tamna"), ""], ["#d4a72c", Tx("Zlatna"), "cover100"], ["#c0392b", Tx("Crvena"), "hood100"], ["#2a9d8f", Tx("Tirkizna"), "rep75"], ["#8e5cd6", Tx("Ljubičasta"), "lv2"]],
+};
+const xmasNow = () => { const d = new Date(), md = (d.getMonth() + 1) * 100 + d.getDate(); return md >= 1215 || md <= 115; };
+function achGet() { let d = null; try { d = JSON.parse(localStorage.getItem(ACH_KEY) || "null"); } catch (e) {} return Object.assign({got:{}, seen:true}, d && typeof d === "object" ? d : {}); }
+let LOOK = (() => { try { return Object.assign({van:"", cap:"", lights:false}, JSON.parse(localStorage.getItem(LOOK_KEY) || "{}")); } catch (e) { return {van:"", cap:"", lights:false}; } })();
+const lookSave = () => { try { localStorage.setItem(LOOK_KEY, JSON.stringify(LOOK)); } catch (e) {} };
+const lightsOpen = () => xmasNow() || !!achGet().got.holi;
+const lookFree = (k, v) => { const o = LOOKS[k].find(x => x[0] === v); return !!o && (!o[2] || !!achGet().got[o[2]]); };
+function achCheck() {
+  const r = recs(), x = {lv:lvNum()}, d = achGet(), fresh = [];
+  for (const [id, name, , test] of ACH) if (!d.got[id] && test(r, x)) { d.got[id] = Date.now(); fresh.push(id); }
+  if (!fresh.length) return;
+  d.seen = false; try { localStorage.setItem(ACH_KEY, JSON.stringify(d)); } catch (e) {}
+  if (!S.started) return;
+  const a = ACH.find(z => z[0] === fresh[0]), un = [...LOOKS.van, ...LOOKS.cap].filter(o => fresh.includes(o[2])).map(o => o[1]);
+  SFX.win(); banner(Tx`Nova medalja: ${a[1]}!`, a[2] + (un.length ? " " + Tx("Otključan je novi ukras. Pogledaj ga pod peharom.") : "") + (fresh.length > 1 ? " " + Tx`I još medalja: ${fresh.length - 1}.` : ""));
+  goalsDot();
+}
+let achT = 0, xmasOn = false;
+function achTick(dt) { achT -= dt; if (achT > 0) return; achT = 4; xmasOn = LOOK.lights && lightsOpen(); if (S.started) achCheck(); }
+function drawMedals() {
+  const d = achGet(), n = Object.keys(d.got).length; d.seen = true; try { localStorage.setItem(ACH_KEY, JSON.stringify(d)); } catch (e) {}
+  return `<div class="gl-gift"><span>${Tx`Medalje: ${n} od ${ACH.length}`}</span></div><div class="md-grid">` +
+    ACH.map(([id, name, desc]) => `<div class="md${d.got[id] ? " got" : ""}"><i>${d.got[id] ? "🏅" : "🔒"}</i><b>${name}</b><small>${desc}</small></div>`).join("") + "</div>";
+}
+function drawLooks() {
+  const d = achGet(), mname = id => (ACH.find(a => a[0] === id) || [0, id])[1];
+  const row = (k, title) => `<div class="gl-task"><div class="gl-tt"><span>${title}</span></div><div class="lk-row">` + LOOKS[k].map(([v, nm, m]) => {
+    const free = !m || d.got[m], on = LOOK[k] === v;
+    return `<button type="button" class="lk${on ? " on" : ""}" data-k="${k}" data-v="${v}" ${free ? "" : "disabled"} title="${free ? nm : Tx`Treba medalja: ${mname(m)}`}"><i style="background:${v || (k === "van" ? "#f1efe6" : "#2a2d35")}"></i><span>${free ? nm : "🔒 " + mname(m)}</span></button>`; }).join("") + `</div></div>`;
+  const lo = lightsOpen();
+  return row("van", Tx("Boja servisnog kombija")) + row("cap", Tx("Boja kape na lampama")) +
+    `<div class="gl-task"><div class="gl-tt"><span>${Tx("Novogodišnje lampice na kućama")}</span></div><div class="lk-row"><button type="button" class="lk${LOOK.lights ? " on" : ""}" data-k="lights" data-v="1" ${lo ? "" : "disabled"}><i class="lk-xmas"></i><span>${LOOK.lights ? Tx("Uključene") : Tx("Isključene")}</span></button></div><small>${lo ? Tx("Svetle noću na osvetljenim kućama.") : Tx`Otvara se u decembru i januaru, ili sa medaljom: ${mname("holi")}.`}</small></div>` +
+    `<p class="gl-note">${Tx("Ukrasi ne menjaju igru, samo izgled. Nove otključavaš medaljama.")}</p>`;
+}
+$("glBody").addEventListener("click", e => {
+  const b = e.target.closest(".lk"); if (!b || b.disabled) return; const k = b.dataset.k;
+  if (k === "lights") LOOK.lights = !LOOK.lights; else if (lookFree(k, b.dataset.v)) LOOK[k] = b.dataset.v;
+  lookSave(); xmasOn = LOOK.lights && lightsOpen(); SFX.click(); goalsDraw();
 });
 // ---------- Records: a few numbers that follow the player across games and towns ----------
 const REC_KEY = "lightThemUp.records";
@@ -1829,7 +1897,7 @@ function step(dt) {
       if (S.ups) S.upsCharge = UPS_SEC; S.trip = 0;
       let bigLine = "";
       if (S.big) { S.big = false;
-        if (S.bigBroke <= 5) { const bonus = Math.round(Math.max(150, .5 * (S.led.pay || 0)) / 10) * 10; S.money += bonus; S.led.bounty += bonus; bigLine = Tx` Preživeo si Veliku noć: +${bonus} $!`; SFX.win(); }
+        if (S.bigBroke <= 5) { const bonus = Math.round(Math.max(150, .5 * (S.led.pay || 0)) / 10) * 10; S.money += bonus; S.led.bounty += bonus; recSet(r => { r.big = (r.big || 0) + 1; }); bigLine = Tx` Preživeo si Veliku noć: +${bonus} $!`; SFX.win(); }
         else bigLine = Tx` Velika noć: razbijeno ${S.bigBroke} lampi, bez nagrade.`; }
       const evLine = evDawn(); S.nextEv = evPick(S.night + 1);
       if (MAP) { const ai = autoIncome(); if (ai) { const up = Math.round(ai * Math.min(.5, .1 + .06 * BL) + (Math.random() < .2 ? ai * .4 : 0)); S.money += ai - up; S.led.auto = ai - up; S.autoUp = up; } }
@@ -2556,13 +2624,13 @@ function face(x, y, mood) {
 function lampHead(s, col, lit) { uprightAt(ctx, s.x, s.y, () => lampHead0(s, col, lit)); }
 function lampHead0(s, col, lit) {
   if (s.lamp.m.style === "moderna" && s.lamp.m.kind !== "park") {
-    ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(s.x - 6, s.y - 2.5, 12, 5, 2) : ctx.rect(s.x - 6, s.y - 2.5, 12, 5); ctx.fill();
+    ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(s.x - 6, s.y - 2.5, 12, 5, 2) : ctx.rect(s.x - 6, s.y - 2.5, 12, 5); ctx.fill(); if (LOOK.cap) { ctx.fillStyle = LOOK.cap; ctx.fillRect(s.x - 6, s.y - 4.5, 12, 2); }
   } else if (s.lamp.m.style === "klasična" && s.lamp.m.kind !== "park") {
     ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.arc(s.x, s.y, lit ? 4.5 : 4, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#2a2d35"; ctx.beginPath(); ctx.moveTo(s.x - 6, s.y - 3); ctx.lineTo(s.x + 6, s.y - 3); ctx.lineTo(s.x, s.y - 7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = LOOK.cap || "#2a2d35"; ctx.beginPath(); ctx.moveTo(s.x - 6, s.y - 3); ctx.lineTo(s.x + 6, s.y - 3); ctx.lineTo(s.x, s.y - 7); ctx.closePath(); ctx.fill();
   } else if (s.lamp.m.kind === "park") {
     ctx.fillStyle = lit ? col : "#5a5f6b"; ctx.fillRect(s.x - 3.5, s.y - 4, 7, 8);
-    ctx.fillStyle = "#2a2d35"; ctx.beginPath(); ctx.moveTo(s.x - 5, s.y - 4); ctx.lineTo(s.x + 5, s.y - 4); ctx.lineTo(s.x, s.y - 8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = LOOK.cap || "#2a2d35"; ctx.beginPath(); ctx.moveTo(s.x - 5, s.y - 4); ctx.lineTo(s.x + 5, s.y - 4); ctx.lineTo(s.x, s.y - 8); ctx.closePath(); ctx.fill();
   } else { ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.arc(s.x, s.y, lit ? 4.5 : 4, 0, 6.28); ctx.fill(); }
 }
 function tenderLamp(s) {
@@ -2728,6 +2796,11 @@ function render() {
         const y = h.y + 4 + 9 * i; if (ISO && y + 4 < Y1 - 2) wq([[X1 + o.x * .2, y + o.y * .2], [X1 + o.x * .2, y + 4 + o.y * .2], [X1 + o.x * .8, y + 4 + o.y * .8], [X1 + o.x * .8, y + o.y * .8]]);
       }
     });
+    if (xmasOn && S.phase === "night" && h.lit && !h.fac) {   // New Year lights along the roof edge
+      const pts = h.poly || [h.x, h.y, X1, h.y, X1, Y1, h.x, Y1], n = pts.length / 2, tq = performance.now() / 400 | 0; let k = h.id;
+      for (let i = 0; i < n; i++) { const ax = pts[2 * i], ay = pts[2 * i + 1], bx = pts[(2 * i + 2) % pts.length], by = pts[(2 * i + 3) % pts.length], L = Math.hypot(bx - ax, by - ay), m = Math.max(1, Math.round(L / 7));
+        for (let j = 0; j < m; j++, k++) { const t = j / m; if ((k + tq) % 5 === 0) continue; ctx.fillStyle = XMAS_C[k % 4]; ctx.fillRect(ax + (bx - ax) * t + o.x - 1.1, ay + (by - ay) * t + o.y - 1.1, 2.2, 2.2); } }
+    }
     if (h.lit || (S.phase === "day" && h.sat > .02)) {
       ctx.fillStyle = "rgba(8,10,20,.75)"; ctx.fillRect(h.x + 3 + o.x, h.y + h.h - 6 + o.y, h.w - 6, 4);
       ctx.fillStyle = h.sat > .6 ? "#7ed39a" : h.sat > .3 ? "#f1c453" : "#ff9d8f"; ctx.fillRect(h.x + 3.5 + o.x, h.y + h.h - 5.5 + o.y, (h.w - 7) * h.sat, 3);
@@ -2961,7 +3034,7 @@ function drawVan(v) {
     for (const sy of [-4, 4]) { ctx.beginPath(); ctx.moveTo(12, sy - 1.2); ctx.lineTo(52, sy * 2.6 - 7); ctx.lineTo(52, sy * 2.6 + 7); ctx.lineTo(12, sy + 1.2); ctx.closePath(); ctx.fill(); }
     ctx.restore(); }
   const busy = v.state === "drive" || v.state === "return" || v.state === "work";
-  drawVehicle(v, v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, "van", S.armor ? "#8b939e" : "#f1efe6", S.phase === "night" && busy ? "on" : "off", (P, z, L, Wd, k) => {   // on the roof: ladder, folded crane, beacon
+  drawVehicle(v, v.x + (home && !MAP ? 14 : 0), v.y, home && !MAP ? 0 : v.ang, "van", LOOK.van || (S.armor ? "#8b939e" : "#f1efe6"), S.phase === "night" && busy ? "on" : "off", (P, z, L, Wd, k) => {   // on the roof: ladder, folded crane, beacon
     const line = (a0, b0, a1, b1) => { const p = P(a0, b0, z), q = P(a1, b1, z); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); };
     if (S.armor) { ctx.fillStyle = "#5d6470"; for (const a of [-.7, -.2, .3]) for (const b of [-.7, .7]) { const p = P(L * a, Wd * b, z); ctx.fillRect(p.x - .8, p.y - .8, 1.6, 1.6); } }
     ctx.strokeStyle = "#8d96a6"; ctx.lineWidth = 1.2 * k; ctx.beginPath(); line(-L * .9, -Wd * .4, L * .35, -Wd * .4); line(-L * .9, Wd * .4, L * .35, Wd * .4);
@@ -3210,7 +3283,7 @@ function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
-  tutTick(dt); dailyTick(dt); if (!hold) mgrTick(dt);
+  tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) mgrTick(dt);
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
   requestAnimationFrame(frame);
