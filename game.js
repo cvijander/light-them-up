@@ -353,7 +353,7 @@ function spawnCarMap() {
   const A = XS[Math.random() * XS.length | 0], far = XS.filter(x => x !== A && Math.hypot(x.x - A.x, x.y - A.y) > 220), pool = far.length ? far : XS.filter(x => x !== A), B = pool[Math.random() * pool.length | 0];
   if (!B) return; const p = mpath(A.inN, B.inN); if (!p) return;
   const type = pickCarType();
-  const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" ? .8 : 1), honked:new Set(), lit:0, n:0,
+  const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : type === "bus" ? "#b8463c" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" || type === "bus" ? .8 : 1), honked:new Set(), lit:0, n:0,
     path:[{x:A.x, y:A.y}, ...p.map(i => MN[i]), {x:B.x, y:B.y}, B.out], i:0, bx:A.out.x, by:A.out.y, ang:0, lane:6};
   movePath(c, 0); traffic.push(c);
 }
@@ -366,14 +366,25 @@ function spawnPedMap() {
   movePath(ped, 0); peds.push(ped);
 }
 function polyPath(c, f) { c.beginPath(); c.moveTo(f[0], f[1]); for (let i = 2; i < f.length; i += 2) c.lineTo(f[i], f[i + 1]); c.closePath(); }
+// Park trees stand up: a shadow on the grass, a trunk and a round crown in two greens (drawn once into the map picture, so they cost nothing per frame)
+function drawTrees(c, trees) {
+  trees.sort((a, b) => proj(a[0], a[1]).y - proj(b[0], b[1]).y);   // back to front
+  for (const [x, y, tr] of trees) { const r = tr * .95, th = r * .7, h = th + r * .9;
+    c.fillStyle = "rgba(0,0,0,.3)"; c.beginPath(); c.ellipse(x + SHV.x * h * .7, y + SHV.y * h * .7, r * 1.05, r * .8, Math.atan2(SHV.y, SHV.x), 0, 6.28); c.fill();
+    uprightAt(c, x, y, () => {
+      c.fillStyle = "#5a4030"; c.fillRect(x - r * .13, y - th - r * .3, r * .26, th + r * .3);
+      c.fillStyle = "#24502f"; c.beginPath(); c.arc(x, y - h, r, 0, 6.28); c.fill();
+      c.fillStyle = "#33713f"; c.beginPath(); c.arc(x - r * .22, y - h - r * .2, r * .72, 0, 6.28); c.fill();
+      c.fillStyle = "rgba(180,230,150,.28)"; c.beginPath(); c.arc(x - r * .4, y - h - r * .45, r * .32, 0, 6.28); c.fill(); });
+  }
+}
 function drawBgMap(c) {
   let s2 = 3; const r2 = () => { s2 = (s2 * 9301 + 49297) % 233280; return s2 / 233280; };
   for (let i = 0; i < 900; i++) { c.fillStyle = r2() > .5 ? "rgba(60,90,60,.25)" : "rgba(0,0,0,.25)"; c.fillRect(r2() * W, r2() * H, 2, 2); }
   for (const [t, f] of MAP.green) { c.fillStyle = t ? "#24503a" : "#1f3b24"; polyPath(c, f); c.fill(); }
-  for (const p of PARKS) { let s3 = 11; const r3 = () => { s3 = (s3 * 9301 + 49297) % 233280; return s3 / 233280; };
-    for (let i = 0; i < 40; i++) { const tx = p.x0 + r3() * (p.x1 - p.x0), ty = p.y0 + r3() * (p.y1 - p.y0), tr = 8 + r3() * 7; if (!ptIn(tx, ty, p.f) || onRoad(tx, ty, tr)) continue;
-      c.fillStyle = "rgba(0,0,0,.3)"; c.beginPath(); c.arc(tx + 3, ty + 3, tr, 0, 6.28); c.fill(); c.fillStyle = "#24452a"; c.beginPath(); c.arc(tx, ty, tr, 0, 6.28); c.fill();
-      c.fillStyle = "rgba(120,170,110,.18)"; c.beginPath(); c.arc(tx - tr * .3, ty - tr * .3, tr * .5, 0, 6.28); c.fill(); } }
+  { const trees = []; for (const p of PARKS) { let s3 = 11; const r3 = () => { s3 = (s3 * 9301 + 49297) % 233280; return s3 / 233280; };
+    for (let i = 0; i < 40; i++) { const tx = p.x0 + r3() * (p.x1 - p.x0), ty = p.y0 + r3() * (p.y1 - p.y0), tr = 8 + r3() * 7; if (!ptIn(tx, ty, p.f) || onRoad(tx, ty, tr) || [MAP.depot, MAP.gen].some(r => r && inRect(tx, ty, [r[0] - tr, r[1] - tr, r[2] + 2 * tr, r[3] + 2 * tr]))) continue; trees.push([tx, ty, tr]); } }
+    drawTrees(c, trees); }
   for (const f of MAP.water) { c.strokeStyle = "#2f4f6e"; c.lineWidth = 10; c.beginPath(); c.moveTo(f[0], f[1]); for (let i = 2; i < f.length; i += 2) c.lineTo(f[i], f[i + 1]); c.stroke(); }
   c.lineCap = "round"; c.lineJoin = "round";
   const line = (ids) => { c.beginPath(); ids.forEach((i, k) => k ? c.lineTo(MN[i].x, MN[i].y) : c.moveTo(MN[i].x, MN[i].y)); c.stroke(); };
@@ -642,14 +653,13 @@ function drawBg() {
   c.beginPath(); c.moveTo(px + 6, py + 6); c.quadraticCurveTo(px + pw * .5, py + ph * .45, px + pw - 6, py + ph - 6); c.stroke();
   c.beginPath(); c.moveTo(px + pw - 6, py + 10); c.quadraticCurveTo(px + pw * .45, py + ph * .55, px + 8, py + ph - 8); c.stroke();
   c.fillStyle = "#2f4f5e"; c.beginPath(); c.ellipse(px + pw * .5, py + ph * .5, 22, 14, 0, 0, 6.28); c.fill();
-  let s3 = 11; const r3 = () => { s3 = (s3 * 9301 + 49297) % 233280; return s3 / 233280; };
+  let s3 = 11; const r3 = () => { s3 = (s3 * 9301 + 49297) % 233280; return s3 / 233280; }, trees = [];
   for (let i = 0; i < 16; i++) {
     const tx = px + 12 + r3() * (pw - 24), ty = py + 12 + r3() * (ph - 24), tr = 8 + r3() * 7;
     if (Math.hypot(tx - (px + pw / 2), ty - (py + ph / 2)) < 34) continue;
-    c.fillStyle = "rgba(0,0,0,.3)"; c.beginPath(); c.arc(tx + 3, ty + 3, tr, 0, 6.28); c.fill();
-    c.fillStyle = "#24452a"; c.beginPath(); c.arc(tx, ty, tr, 0, 6.28); c.fill();
-    c.fillStyle = "rgba(120,170,110,.18)"; c.beginPath(); c.arc(tx - tr * .3, ty - tr * .3, tr * .5, 0, 6.28); c.fill();
+    trees.push([tx, ty, tr]);
   }
+  drawTrees(c, trees);
   c.fillStyle = "#cfd5df"; c.font = "700 13px Barlow Condensed, sans-serif"; c.textAlign = "center"; { const [lx, ly] = lblSpot(px + pw / 2, py + ph / 2 + 4, 16); c.fillText("PARK", lx, ly); }
   // streets
   c.fillStyle = "#262a33";
@@ -2069,14 +2079,14 @@ function step(dt) {
 
 // ---------- Live traffic: cars drive the streets, use high beams in the dark, honk at hooligans ----------
 const CAR_COLS = ["#b8bec7", "#2f4a78", "#7a2e3a", "#4a4f58", "#8c8f94"];   // muted, so the lamps and the van stand out
-const CAR_TYPES = ["hatch", "hatch", "hatch", "taxi", "truck", "police"];
+const CAR_TYPES = ["hatch", "hatch", "small", "small", "wagon", "wagon", "taxi", "truck", "police", "bus"];
 function pickCarType() { return S.zInd && Math.random() < .4 ? "truck" : CAR_TYPES[Math.random() * CAR_TYPES.length | 0]; }   // industry bought: more trucks (~50% vs ~17%)
 function spawnCar() {
   if (traffic.length >= MAX_CARS) return;
   if (MAP) return spawnCarMap();
   const by = boundY(), vert = Math.random() < .5, dir = Math.random() < .5 ? 1 : -1;
   const type = pickCarType();
-  const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" ? .8 : 1), dir, vert, honked:new Set(), lit:0, n:0};
+  const c = {type, col:type === "taxi" ? "#f2c230" : type === "police" ? "#eef1f6" : type === "truck" ? "#e6e2d6" : type === "bus" ? "#b8463c" : CAR_COLS[Math.random() * CAR_COLS.length | 0], sp:rnd(62, 80) * (type === "truck" || type === "bus" ? .8 : 1), dir, vert, honked:new Set(), lit:0, n:0};
   if (vert) { const x = VS[Math.random() * VS.length | 0]; c.x = x + (dir > 0 ? -5 : 5); c.y = dir > 0 ? -20 : by + 20; }
   else { const ys = hs(), y = ys[Math.random() * ys.length | 0]; c.y = y + (dir > 0 ? 5 : -5); c.x = dir > 0 ? -20 : W + 20; }
   traffic.push(c);
@@ -2136,7 +2146,7 @@ const quadAt = (pts, u0, u1, v0, v1) => { const L = (A, B, t) => ({x:A.x + (B.x 
 const fillQ = (q, f) => { ctx.fillStyle = f; ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(q[k].x, q[k].y); ctx.closePath(); ctx.fill(); };
 // A whole vehicle. kind: car, taxi, police, truck, van. o = the object (for smooth turning), lights: "off" | "on" | "brake".
 function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
-  const big = kind === "van" || kind === "truck", L0 = kind === "truck" ? 15 : kind === "van" ? 14 : 10, W0 = kind === "truck" ? 6.5 : kind === "van" ? 7 : 5;
+  const SZ = {truck:[15, 6.5], van:[14, 7], bus:[21, 6.6], small:[8.4, 4.7], wagon:[11, 5.1]}[kind] || [10, 5], L0 = SZ[0], W0 = SZ[1];
   const G = 1.3, k = G * vSize(L0 * G), L = L0 * k, Wd = W0 * k, a = o ? smoothAng(o, ang) : ang, c = Math.cos(a), s = Math.sin(a), Z = (ISO ? 1.35 : 1) * k;
   // layer 1: soft shadow on the road + wheels
   ctx.save(); ctx.translate(x + SHV.x * 3 * Z, y + SHV.y * 3 * Z); ctx.rotate(a); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.roundRect(-L - 1.5, -Wd - 1.5, 2 * L + 3, 2 * Wd + 3, 4 * k); ctx.fill(); ctx.restore();
@@ -2152,7 +2162,7 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
     if (i === 1 || i === 3) wheels(pts);
   };
   if (kind === "truck") {
-    const cargo = () => vBox(x, y, c, s, -L, L * .22, Wd, 1.2 * Z, 10 * Z, "#d9d4c6", {face:(i, pts, v) => { if (i === 2) lamps(i, pts, v); if (i === 1 || i === 3) { fillQ(quadAt(pts, .05, .95, .82, .9), "rgba(0,0,0,.18)"); wheels(pts, [.25, .75]); } }});;
+    const cargo = () => vBox(x, y, c, s, -L, L * .22, Wd, 1.2 * Z, 10 * Z, "#d9d4c6", {face:(i, pts, v) => { if (i === 2) lamps(i, pts, v); if (i === 1 || i === 3) { fillQ(quadAt(pts, .05, .95, .82, .9), "rgba(0,0,0,.18)"); wheels(pts, [.3]); } }});
     const cab = () => vBox(x, y, c, s, L * .3, L, Wd * .95, 1.2 * Z, 7 * Z, "#3d6fc9", {ti:1.6 * k, tr:0, face:(i, pts) => { if (i === 0) { fillQ(quadAt(pts, .1, .9, .58, .96), glass); lamps(i, pts); } else if (i !== 2) { fillQ(quadAt(pts, i === 1 ? .08 : .5, i === 1 ? .5 : .92, .55, .95), glass); wheels(pts, [.5]); } }});   // cab
     if (c * VDN.x + s * VDN.y > 0) { cargo(); cab(); } else { cab(); cargo(); }   // the nearer part last
     return;
@@ -2163,9 +2173,22 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
       top:(hi, P) => extra && extra(P, 10 * Z, L, Wd, k)});   // tall box with dark glass; ladder, beacon, crane on the roof
     return;
   }
-  vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 4.6 * Z, col, {ti:.4 * k, face:lamps});   // lower body
-  vBox(x, y, c, s, -L * .55, L * .35, Wd * .92, 4.6 * Z, 7.6 * Z, col, {ti:1.6 * k, tw:.9 * k, roof:shade(col, 1.22),   // cabin: glass all round, light roof
-    face:(i, pts) => { if (i === 1 || i === 3) { fillQ(quadAt(pts, .07, .47, .12, .86), glass); fillQ(quadAt(pts, .53, .93, .12, .86), glass); } else fillQ(quadAt(pts, .06, .94, .1, .88), i === 0 ? glassHi : glass); },   // side windows with a pillar
+  if (kind === "bus") {   // city bus: long, a band of windows, big windscreen, two axles
+    vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 10.5 * Z, col, {ti:.5 * k, tw:.5 * k, roof:"#e9e6df", face:(i, pts, v) => {
+      if (i === 1 || i === 3) { fillQ(quadAt(pts, .04, .96, 0, .12), "rgba(0,0,0,.35)"); for (let w = 0; w < 6; w++) fillQ(quadAt(pts, .05 + w * .152, .18 + w * .152, .5, .86), glass); fillQ(quadAt(pts, .04, .96, .4, .46), "#f2f0ea"); wheels(pts, [.18, .78]); }
+      else if (i === 0) { fillQ(quadAt(pts, .06, .94, .42, .92), glassHi); fillQ(quadAt(pts, .1, .9, .9, .99), "#20242c"); lamps(0, pts, v); }
+      else { fillQ(quadAt(pts, .15, .85, .55, .85), glass); lamps(2, pts, v); } },
+      top:(hi, P) => { ctx.fillStyle = "rgba(0,0,0,.18)"; const a = P(-L * .55, -Wd * .5, 10.5 * Z), b = P(-L * .15, -Wd * .5, 10.5 * Z), d = P(-L * .15, Wd * .5, 10.5 * Z), e = P(-L * .55, Wd * .5, 10.5 * Z); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.fill(); }});   // roof unit
+    return;
+  }
+  // cars: lower body with a sloping hood and boot, bumpers, then a glass cabin set back with a raked windscreen
+  const cab = kind === "small" ? [-.8, .3] : kind === "wagon" ? [-.95, .32] : [-.62, .3], cabH = kind === "small" ? 7.9 : 7.3;
+  vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 4.3 * Z, col, {ti:(kind === "small" ? .9 : 1.5) * k, tr:(kind === "wagon" || kind === "small" ? .3 : 1) * k, tw:.55 * k, roof:shade(col, 1.1), face:(i, pts, v) => {
+    fillQ(quadAt(pts, .03, .97, 0, .24), "rgba(0,0,0,.32)");   // bumper / sill: a dark band low down, so the body looks rounder
+    if (i === 0) fillQ(quadAt(pts, .32, .68, .3, .62), "rgba(0,0,0,.4)");   // grille
+    lamps(i, pts, v); }});   // lower body
+  vBox(x, y, c, s, L * cab[0], L * cab[1], Wd * .86, 4.3 * Z, cabH * Z, col, {ti:2.4 * k, tr:(kind === "wagon" ? .3 : 1.3) * k, tw:1 * k, roof:shade(col, 1.25),   // cabin: raked glass, light roof
+    face:(i, pts) => { if (i === 1 || i === 3) { const w3 = kind === "wagon"; fillQ(quadAt(pts, .07, w3 ? .34 : .47, .1, .84), glass); fillQ(quadAt(pts, w3 ? .38 : .53, w3 ? .64 : .93, .1, .84), glass); if (w3) fillQ(quadAt(pts, .68, .93, .1, .84), glass); } else fillQ(quadAt(pts, .05, .95, .08, .9), i === 0 ? glassHi : glass); },   // side windows with pillars
     top:(hi) => {
       const cx = (hi[0].x + hi[2].x) / 2, cy = (hi[0].y + hi[2].y) / 2;
       if (kind === "taxi") uprightAt(ctx, cx, cy, () => { ctx.fillStyle = night ? "#fff3b0" : "#2c2f38"; if (night) { ctx.shadowColor = "#fff3b0"; ctx.shadowBlur = 8; } ctx.fillRect(cx - 3 * k, cy - 3 * k, 6 * k, 3 * k); ctx.shadowBlur = 0; });
@@ -2173,7 +2196,7 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
         ctx.shadowBlur = 10; ctx.fillStyle = ctx.shadowColor = on ? "#4d8bff" : "#7a1a1a"; ctx.fillRect(cx - 4.5 * k, cy - 2.6 * k, 4.3 * k, 2.6 * k); ctx.fillStyle = ctx.shadowColor = on ? "#1a2a6a" : "#ff4d4d"; ctx.fillRect(cx + .2 * k, cy - 2.6 * k, 4.3 * k, 2.6 * k); ctx.shadowBlur = 0; });
     }});
 }
-const CAR_KIND = {hatch:"car", taxi:"taxi", police:"police", truck:"truck"};
+const CAR_KIND = {hatch:"car", small:"small", wagon:"wagon", bus:"bus", taxi:"taxi", police:"police", truck:"truck"};
 const ZLBL = {};
 function zoneLabelAt(k, r, tw) {   // the zone's name goes where no lamp badge sits on it
   const key = k + "|" + Math.round(tw); if (ZLBL[key]) return ZLBL[key];
@@ -3117,7 +3140,7 @@ $("btnShopClose").onclick = () => setShop(false);
 $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
-window.__game = {freeSpot, yardOk, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
+window.__game = {freeSpot, yardOk, PARKS, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
   view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW, PW:pbox().w, ISO}), proj, toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }, get vans() { return vans; }};
 
