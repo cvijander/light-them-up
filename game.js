@@ -313,7 +313,7 @@ function drawLandmarks() {
 function mapPosOk(self, x, y, c) {
   const ax = c ? c.axis : self && self.axis;
   if (x < 10 || x > W - 10 || y < 10 || y > H - 10) return false;
-  if (ax === "xy") { if (!inParkMap(x, y)) return false; } else if (onRoad(x, y, 2) || inBld(x, y, 0)) return false;
+  if (ax === "xy") { if (!inParkMap(x, y)) return false; } else if (ax === "yd") { if (!yardOk(x, y)) return false; } else if (onRoad(x, y, 2) || inBld(x, y, 0)) return false;
   for (const o of slots) if (o !== self && o !== tmp && (o.lamp || o.job) && avail(o) && Math.hypot(o.x - x, o.y - y) < 34) return false;
   return true;
 }
@@ -327,7 +327,7 @@ function freeSpotMap(p) {
 }
 function moveSlotMap(s, px, py) {
   let x, y;
-  if (s.axis === "xy") { x = px; y = py; }
+  if (s.axis === "xy" || s.axis === "yd") { x = px; y = py; }
   else { const g = MSEG[s.sg], b = segD(s.bx, s.by, g), o = segD(px, py, g), t = cl2(o.t, Math.max(4, b.t - 45), Math.min(g.len - 4, b.t + 45)), lat = cl2(o.d * (o.side === s.side ? 1 : 0), g.w / 2 + 3, g.w / 2 + 23), q = segPt(g, t, lat * s.side); x = q.x; y = q.y; }
   if (mapPosOk(s, x, y)) { const moved = Math.abs(x - s.x) > .01 || Math.abs(y - s.y) > .01; setSlotPos(s, x, y); return moved; }
   return false;
@@ -458,15 +458,16 @@ function startLamps() {
   put(at(100, 173), "na", 0, "broken"); put(at(520, 507), "na", 0, "broken"); put(at(415, 90), "na", 0, "burnt"); put(at(100, 507), "na", 0, "broken");
 }
 let BASE_N = slots.length, tmp = null;   // fixed spots; tmp = a free spot being tried right now
-function makeSlot(c) { return {id:slots.length, x:c.x, y:c.y, rx:c.rx, ry:c.ry, bx:c.x, by:c.y, axis:c.axis, sg:c.sg, side:c.side, plot:!MAP && c.y > LOCK_Y, zone:c.axis === "xy" ? "park" : "ulica", district:MAP ? DIST0 : c.y > LOCK_Y ? "stari" : "novi", lamp:null, job:null, dyn:true}; }
+function makeSlot(c) { return {id:slots.length, x:c.x, y:c.y, rx:c.rx, ry:c.ry, bx:c.x, by:c.y, axis:c.axis, sg:c.sg, side:c.side, plot:!MAP && c.y > LOCK_Y, zone:c.axis === "xy" ? "park" : c.axis === "yd" ? "dvoriste" : "ulica", district:MAP ? DIST0 : c.y > LOCK_Y ? "stari" : "novi", lamp:null, job:null, dyn:true}; }
 function useTmp(c) {
   if (!tmp) { tmp = makeSlot(c); slots.push(tmp); }
-  Object.assign(tmp, {x:c.x, y:c.y, rx:c.rx, ry:c.ry, bx:c.x, by:c.y, axis:c.axis, sg:c.sg, side:c.side, plot:!MAP && c.y > LOCK_Y, zone:c.axis === "xy" ? "park" : "ulica", district:MAP ? DIST0 : c.y > LOCK_Y ? "stari" : "novi"});
+  Object.assign(tmp, {x:c.x, y:c.y, rx:c.rx, ry:c.ry, bx:c.x, by:c.y, axis:c.axis, sg:c.sg, side:c.side, plot:!MAP && c.y > LOCK_Y, zone:c.axis === "xy" ? "park" : c.axis === "yd" ? "dvoriste" : "ulica", district:MAP ? DIST0 : c.y > LOCK_Y ? "stari" : "novi"});
   return tmp;
 }
 function dropTmp() { if (tmp && !tmp.lamp && !tmp.job && slots[slots.length - 1] === tmp) { slots.pop(); if (S.pending === tmp) S.pending = null; if (S.sel === tmp) S.sel = null; } tmp = null; }
 function spotOk(c) {
   if (MAP) return mapPosOk(null, c.x, c.y, c);
+  if (c.axis === "yd" && !yardOk(c.x, c.y)) return false;
   if (c.axis === "y" && HS_ALL.some(h => Math.abs(c.y - h) < 30)) return false;
   if (c.axis === "x" && VS.some(v => Math.abs(c.x - v) < 30)) return false;
   if (Math.abs(c.y - LOCK_Y) < 10 || c.y > boundY() - 8) return false;
@@ -474,7 +475,24 @@ function spotOk(c) {
   for (const o of slots) if (o !== tmp && (o.lamp || o.job) && avail(o) && Math.hypot(o.x - c.x, o.y - c.y) < 34) return false;
   return true;
 }
-function freeSpot(p) {   // any sidewalk spot next to a street, or inside the park
+// Yards: a lantern (only a lantern) can stand between the buildings inside a block, away from the street.
+function yardOk(x, y) {
+  if (MAP) { if (onRoad(x, y, 16) || inParkMap(x, y) || [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]].some(([dx, dy]) => inBld(x + dx, y + dy, 0))) return false; return inBld(x, y, 45); }
+  if (x < 12 || x > W - 12 || y < 12 || y > boundY() - 10 || Math.abs(y - LOCK_Y) < 12) return false;
+  if (VS.some(v => Math.abs(x - v) < 38) || hs().some(h => Math.abs(y - h) < 38)) return false;
+  if (x > PARK[0] - 6 && x < PARK[0] + PARK[2] + 6 && y > PARK[1] - 6 && y < PARK[1] + PARK[3] + 6) return false;
+  const on = houses.filter(hOn); if (on.some(h => x > h.x - 4 && x < h.x + h.w + 4 && y > h.y - 4 && y < h.y + h.h + 4)) return false;
+  return on.some(h => x > h.x - 45 && x < h.x + h.w + 45 && y > h.y - 45 && y < h.y + h.h + 45);
+}
+function yardCand(p) {
+  if (!yardOk(p.x, p.y)) return null;
+  if (MAP) { const r = mproj(p); return r ? {x:p.x, y:p.y, rx:r.x, ry:r.y, axis:"yd"} : null; }
+  const v = VS.reduce((b, x) => Math.abs(p.x - x) < Math.abs(p.x - b) ? x : b), h = hs().reduce((b, y) => Math.abs(p.y - y) < Math.abs(p.y - b) ? y : b);
+  return Math.abs(p.x - v) < Math.abs(p.y - h) ? {x:p.x, y:p.y, rx:v, ry:p.y, axis:"yd"} : {x:p.x, y:p.y, rx:p.x, ry:h, axis:"yd"};
+}
+const lanternTool = () => { const f = pal ? pal.f : S.tool; return !!FIXTURES[f] && FIXTURES[f].kind === "park"; };   // the fixture being placed (dragged or picked)
+function freeSpot(p) {   // any sidewalk spot next to a street, or inside the park (a lantern also in a yard between buildings)
+  if (lanternTool()) { const y = yardCand(p); if (y && spotOk(y)) return y; }
   if (MAP) return freeSpotMap(p);
   const cands = [], side = d => (d < 0 ? -1 : 1) * clamp(Math.abs(d), 22, 34);
   for (const v of VS) { const d = p.x - v; if (Math.abs(d) < 60) cands.push({x:v + side(d), y:p.y, rx:v, ry:p.y, axis:"y"}); }
@@ -702,6 +720,7 @@ function litAt(x, y, k, on) {
 }
 function moodOf(s, m) {
   if (s.zone === "park") return m.kind === "park" ? [1, Tx("U parku vole fenjere.")] : [-1, Tx("U parku stanari žele fenjer.")];
+  if (s.zone === "dvoriste") return m.kind === "park" ? [1, Tx("Fenjer u dvorištu: stanari vole, a svetli bojom ulice.")] : [-1, Tx("U dvorište između zgrada ide fenjer.")];
   const zk = zoneAt(s.x, s.y);
   if (zk === "ind") return m.style === "moderna" ? [1, Tx("Industrijska zona voli jaku, hladnu LED rasvetu.")] : m.kind === "park" ? [-1, Tx("Fenjer ne valja za fabrike.")] : [0, Tx("Fabrikama treba moderna LED rasveta.")];
   if (zk === "cen") return m.style === "klasična" ? [1, Tx("Šetalište voli toplo, dekorativno svetlo.")] : [-1, Tx("Na šetalištu ne vole hladnu LED svetiljku.")];
@@ -709,9 +728,10 @@ function moodOf(s, m) {
   if (MAP && s.district === "novi") return m.kind === "park" ? [-1, Tx("Fenjer je preslab za ulicu sa zgradama.")] : m.style === "moderna" ? [1, Tx("Zgrade vole modernu, hladnu LED rasvetu.")] : [0, Tx("Klasični stub je u redu, ali zgrade više vole LED.")];
   return m.kind === "ulica" ? [1, Tx("Ulična lampa na ulici, stanari zadovoljni.")] : [0, Tx("Fenjer je lep, ali je ulici potrebna jača lampa.")];
 }
+const lampCol = s => s.zone === "dvoriste" && s.lamp.m.kind === "park" && districtTone(s.district).tone === "hladno" ? [215, 232, 255] : s.lamp.m.col;   // a yard lantern glows in the colour of its street lamps
 function districtTone(d, extra) {   // extra: {slot, m} to test a placement
   const tones = new Set();
-  for (const s of slots) if (s.district === d && avail(s) && !zoneAt(s.x, s.y)) {   // bought zones (industry, promenade) have their own taste and do not break the same-colour bonus
+  for (const s of slots) if (s.district === d && avail(s) && !zoneAt(s.x, s.y) && s.zone !== "dvoriste") {   // yard lanterns take the street colour   // bought zones (industry, promenade) have their own taste and do not break the same-colour bonus
     const m = extra && extra.slot === s ? extra.m : s.lamp && s.lamp.m; if (m) tones.add(m.tone); }
   return {tones, bonus:tones.size === 1 ? 1.25 : 1, tone:tones.size === 1 ? [...tones][0] : null};
 }
@@ -742,6 +762,7 @@ function slotPosOk(s, x, y) {
   if (MAP) return mapPosOk(s, x, y);
   if (s.axis === "y" && HS_ALL.some(h => Math.abs(y - h) < 30)) return false;
   if (s.axis === "x" && VS.some(v => Math.abs(x - v) < 30)) return false;
+  if (s.axis === "yd" && !yardOk(x, y)) return false;
   if (s.plot ? y < LOCK_Y + 8 : y > LOCK_Y - 8) return false;
   if (x < 8 || x > W - 8 || y < 8 || y > H - 8) return false;
   for (const o of slots) if (o !== s && (o.lamp || o.job) && avail(o) && Math.hypot(o.x - x, o.y - y) < 34) return false;
@@ -753,6 +774,7 @@ function moveSlot(s, px, py) {
   const band = (v, road, base) => base < road ? clamp(v, road - 40, road - 19) : clamp(v, road + 19, road + 40);   // stay on the sidewalk, same side
   if (s.axis === "y") { y = clamp(py, s.by - M, s.by + M); x = band(px, s.rx, s.bx); }
   else if (s.axis === "x") { x = clamp(px, s.bx - M, s.bx + M); y = band(py, s.ry, s.by); }
+  else if (s.axis === "yd") { x = clamp(px, s.bx - M, s.bx + M); y = clamp(py, s.by - M, s.by + M); }
   else { x = clamp(px, PARK[0] + 10, PARK[0] + PARK[2] - 10); y = clamp(py, PARK[1] + 10, PARK[1] + PARK[3] - 10); }
   for (const [tx, ty] of [[x, y], [x, s.y], [s.x, y]]) if (slotPosOk(s, tx, ty)) { const moved = tx !== s.x || ty !== s.y; setSlotPos(s, tx, ty); return moved; }
   return false;
@@ -884,7 +906,7 @@ function checkGone() {
 }
 function slotAt(p, rad) {
   let best = null, bd = rad;
-  for (const s of slots) { const d = s.axis === "xy" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
+  for (const s of slots) { const d = s.axis === "xy" || s.axis === "yd" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
   return best;
 }
 function toWorld(e) { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return unproj(c.u / cssW * pw / VZ + VX, c.v / cssW * pw / VZ + VY); }
@@ -1030,7 +1052,7 @@ document.addEventListener("pointermove", e => {
   if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) { if (pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by); S.pending = null; msg(Tx("Prevuci svetiljku na mapu, pored ulice ili u park.")); return; }
   const p = toWorld({clientX:cx, clientY:cy}), sp = palSpot(p);
   if (sp !== pd && pd && !pd.lamp && !pd.job) setSlotPos(pd, pd.bx, pd.by);
-  if (!sp) { S.pending = null; msg(MAP ? Tx("Ovde ne može: to su kuće i dvorišta. Lampa ide samo pored ulice ili u park, i samo se oni broje u Svetlo %.") : Tx("Ovde ne može: lampa ide pored ulice ili u park, ne preblizu druge lampe."), true); return; }
+  if (!sp) { S.pending = null; msg(lanternTool() ? Tx("Ovde ne može. Fenjer ide pored ulice, u park ili u dvorište između zgrada, ne preblizu druge lampe.") : MAP ? Tx("Ovde ne može: to su kuće i dvorišta. Lampa ide samo pored ulice ili u park, i samo se oni broje u Svetlo %.") : Tx("Ovde ne može: lampa ide pored ulice ili u park, ne preblizu druge lampe."), true); return; }
   S.pending = sp; S.sel = sp; if (!sp.lamp && sp !== tmp) moveSlot(sp, p.x, p.y);
   const [mood, why] = moodOf(sp, toolModel()); msg(sp.lamp ? Tx`Pusti ovde: menjaš ${sp.lamp.m.f.name} za ${FIXTURES[pal.f].name}. ${why}` : Tx`Pusti ovde: +${coverGain(sp, toolModel())}% svetla. ${why}`, mood < 0);
 });
@@ -1744,7 +1766,7 @@ function step(dt) {
     S.inc = pay - fuel;
   } else { S.inc = S.dayRate; S.money += S.dayRate * dt; S.led.pay += S.dayRate * dt; }
   // jobs & vans
-  const spd = 115 * SPEED_MULT[S.speedLv] * (S.phase === "day" ? 1.3 : 1);
+  const spd = 92 * SPEED_MULT[S.speedLv] * (S.phase === "day" ? 1.2 : 1);   // a bit faster than traffic, not flying past it
   for (const v of vans) {
     if (!v.job) {
       const free = jobs.filter(j => !j.assigned);
@@ -1755,6 +1777,7 @@ function step(dt) {
     }
     if (v.state === "drive" || v.state === "return") {
       let st = spd * dt;
+      if (v.path.length && v.va != null) { const q = v.path[0], d = Math.atan2(q.y - v.y, q.x - v.x) - v.va; if (Math.hypot(q.x - v.x, q.y - v.y) > 2 && Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) > 1.2) st = 0; }   // a sharp turn (leaving the depot, U-turn): turn on the spot first, don't spin while driving
       while (st > 0 && v.path.length) {
         const q = v.path[0], dx = q.x - v.x, dy = q.y - v.y, d = Math.hypot(dx, dy);
         if (d > .01) v.ang = Math.atan2(dy, dx);
@@ -1906,7 +1929,8 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
   if (Math.abs(-s * VDN.x + c * VDN.y) < .1) for (const sx of [-.6, .62]) for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(L * sx, sy * (Wd - .3 * k), 2.6 * k, 1.5 * k, 0, 0, 6.28); ctx.fill(); }   // wheels on the road only when no side is in view (else the side wheels show, and these peeked out as extra wheels)
   ctx.restore();
   const night = lights !== "off", glass = "#1d2738", glassHi = "#5d7896";
-  const wheels = (pts, us = [.2, .8]) => { for (const u of us) { const p = quadAt(pts, u, u, .12, .12)[0], r = 2.3 * Z; uprightAt(ctx, p.x, p.y, () => { ctx.fillStyle = "#101116"; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.28); ctx.fill(); ctx.fillStyle = "#6b7280"; ctx.beginPath(); ctx.arc(p.x, p.y, r * .42, 0, 6.28); ctx.fill(); }); } };   // wheels on the visible sides
+  const wheels = (pts, us = [.2, .8]) => { for (const u of us) { const p = quadAt(pts, u, u, .12, .12)[0], r = 2.3 * Z;   // wheels on the visible sides, lying in the side wall (turn with the car, not flat circles facing the screen)
+    ctx.save(); ctx.transform(c * r, s * r, UPV.x * r, UPV.y * r, p.x, p.y); ctx.fillStyle = "#101116"; ctx.beginPath(); ctx.arc(0, 0, 1, 0, 6.28); ctx.fill(); ctx.fillStyle = "#6b7280"; ctx.beginPath(); ctx.arc(0, 0, .42, 0, 6.28); ctx.fill(); ctx.restore(); } };
   const lamps = (i, pts, vis) => {   // headlights on the front wall, tail lights on the rear wall
     if (i === 0) { const f = night ? "#fff6d0" : "#e9e4cf"; if (night) { ctx.shadowColor = "#fff2b0"; ctx.shadowBlur = 8; } fillQ(quadAt(pts, .08, .26, .35, .75), f); fillQ(quadAt(pts, .74, .92, .35, .75), f); ctx.shadowBlur = 0; }
     if (i === 2) { const f = lights === "brake" ? "#ff2a1f" : night ? "#d3261c" : "#8f1f1a"; if (lights === "brake") { ctx.shadowColor = "#ff2a1f"; ctx.shadowBlur = 8; } fillQ(quadAt(pts, .06, .24, .4, .78), f); fillQ(quadAt(pts, .76, .94, .4, .78), f); ctx.shadowBlur = 0; }
@@ -2393,7 +2417,7 @@ function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(dark, 0, 0, cv.width, cv.height); VT(ctx);
   ctx.globalCompositeOperation = "lighter";
   const glow = (x, y, r, c, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${c},${.32 * a})`); g.addColorStop(.35, `rgba(${c},${.12 * a})`); g.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill(); };
-  for (const s of lit) glow(s.x, s.y, lr(s), s.lamp.m.col, s.lamp.fa);
+  for (const s of lit) glow(s.x, s.y, lr(s), lampCol(s), s.lamp.fa);
   if (S.phase === "night") for (const r of refls) glow(r.x, r.y, REF.r, REF.col, .9);
   for (const c of traffic) if (S.phase === "night") { const a = c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), px = -Math.sin(a) * 4, py = Math.cos(a) * 4, d = c.dark ? 30 : 22, r = c.dark ? 34 : 22, k = c.dark ? .85 : .45;
     glow(c.x + Math.cos(a) * d + px, c.y + Math.sin(a) * d + py, r, [255,236,180], k); glow(c.x + Math.cos(a) * d - px, c.y + Math.sin(a) * d - py, r, [255,236,180], k);
@@ -2431,7 +2455,7 @@ function render() {
   for (const s of slots) {
     if (!s.lamp || !avail(s)) continue;
     const L = s.lamp;
-    if (isLit(s)) { ctx.shadowColor = `rgb(${L.m.col})`; ctx.shadowBlur = 12; lampHead(s, `rgba(${L.m.col},${L.fa})`, true); ctx.shadowBlur = 0; }
+    if (isLit(s)) { const lc = lampCol(s); ctx.shadowColor = `rgb(${lc})`; ctx.shadowBlur = 12; lampHead(s, `rgba(${lc},${L.fa})`, true); ctx.shadowBlur = 0; }
     else if (L.state === "broken") { ctx.strokeStyle = "#ff6b5b"; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x + 4, s.y + 4); ctx.moveTo(s.x + 4, s.y - 4); ctx.lineTo(s.x - 4, s.y + 4); ctx.stroke(); }
     else lampHead(s, "", false);
     if (L.glass) { ctx.strokeStyle = "rgba(159,216,255,.85)"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(s.x, s.y, 7.5, 0, 6.28); ctx.stroke(); }
@@ -2739,7 +2763,7 @@ $("btnShopClose").onclick = () => setShop(false);
 $("scrim").onclick = () => setShop(false);
 for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]) $(id).addEventListener("click", () => { if (mq.matches) setTimeout(() => setShop(false), 250); });
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
-window.__game = {freeSpot, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
+window.__game = {freeSpot, yardOk, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
   view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW, PW:pbox().w, ISO}), proj, toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
   get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }, get vans() { return vans; }};
 
