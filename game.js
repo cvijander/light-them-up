@@ -2336,7 +2336,7 @@ function render() {
     ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(1.5, 4, 7, 2.6, 0, 0, 6.28); ctx.fill();   // shadow
     if (S.phase === "night") { ctx.fillStyle = "rgba(255,70,60,.18)"; ctx.beginPath(); ctx.arc(0, -6 + b, 12, 0, 6.28); ctx.fill(); }
-    ctx.lineWidth = 1.6 / k + .6; ctx.strokeStyle = "rgba(255,225,215,.85)";
+    ctx.lineWidth = .8; ctx.strokeStyle = "rgba(255,225,215,.8)";
     ctx.fillStyle = "#1c1d24"; ctx.beginPath(); ctx.roundRect(-3.6, -3 + b, 3, 7, 1.2); ctx.roundRect(.6, -3 + b, 3, 7, 1.2); ctx.fill();   // legs
     ctx.fillStyle = "#e0343e"; ctx.beginPath(); ctx.roundRect(-5.5, -11 + b, 11, 10, 3.5); ctx.fill(); ctx.stroke();   // hoodie
     ctx.fillStyle = "#b8242d"; ctx.beginPath(); ctx.arc(0, -14 + b, 4.6, 0, 6.28); ctx.fill(); ctx.stroke();   // hood
@@ -2347,13 +2347,21 @@ function render() {
     if (c.gone || (c.y > boundY())) continue;
     drawVehicle(null, c.x, c.y, c.ang != null ? c.ang : c.v ? Math.PI / 2 : 0, "car", c.col, "off");   // parked cars
   }
-  for (const t of thieves) {
-    const b = Math.sin(t.bob) * 1.1;
-    ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.beginPath(); ctx.ellipse(t.x + 2, t.y + 7, 6, 3, 0, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#3a3550"; ctx.beginPath(); ctx.arc(t.x, t.y + b, 6.5, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#15131c"; ctx.beginPath(); ctx.arc(t.x, t.y - 3 + b, 4.5, 0, 6.28); ctx.fill();
-    ctx.fillStyle = "#7a6a40"; ctx.beginPath(); ctx.arc(t.x + 6, t.y + 3 + b, 3.2, 0, 6.28); ctx.fill();
-  }
+  for (const t of thieves) uprightAt(ctx, t.x, t.y, () => {   // the thief from the title picture: striped shirt, black beanie and mask, a sack of loot
+    const b = Math.sin(t.bob) * 1.1, k = Math.max(1.5, 22 / (20 * pxPerU()));
+    ctx.save(); ctx.translate(t.x, t.y); ctx.scale(k, k); ctx.strokeStyle = "rgba(255,240,200,.8)"; ctx.lineWidth = .8;
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(1.5, 4, 8, 2.6, 0, 0, 6.28); ctx.fill();   // shadow
+    ctx.fillStyle = "#1c1d24"; ctx.beginPath(); ctx.roundRect(-3.6, -3 + b, 3, 7, 1.2); ctx.roundRect(.6, -3 + b, 3, 7, 1.2); ctx.fill();   // legs
+    ctx.fillStyle = "#8a6a3c"; ctx.beginPath(); ctx.arc(6.5, -4 + b, 4.2, 0, 6.28); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#6b5030"; ctx.fillRect(5.6, -9.2 + b, 1.8, 2);   // sack on his back
+    ctx.save(); ctx.beginPath(); ctx.roundRect(-5.5, -11 + b, 11, 10, 3.5); ctx.clip(); ctx.fillStyle = "#f1f1ee"; ctx.fillRect(-6, -12 + b, 12, 12);   // striped shirt
+    ctx.fillStyle = "#1b1c22"; for (let y = -10; y < 0; y += 3) ctx.fillRect(-6, y + b, 12, 1.5); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(-5.5, -11 + b, 11, 10, 3.5); ctx.stroke();
+    ctx.fillStyle = "#f3c9a4"; ctx.beginPath(); ctx.arc(0, -14.5 + b, 4.4, 0, 6.28); ctx.fill(); ctx.stroke();   // face
+    ctx.fillStyle = "#1b1c22"; ctx.fillRect(-4.4, -15.6 + b, 8.8, 2.4);   // black eye mask
+    ctx.fillStyle = "#fff"; ctx.fillRect(-2.6, -15 + b, 1.4, 1.1); ctx.fillRect(1.2, -15 + b, 1.4, 1.1);
+    ctx.fillStyle = "#24252d"; ctx.beginPath(); ctx.arc(0, -16.4 + b, 4.6, Math.PI, 0); ctx.fill(); ctx.fillRect(-4.8, -16.8 + b, 9.6, 1.6);   // beanie
+    ctx.restore();
+  });
   drawSpots();
   for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];
     if (own && k === "ind" && S.phase === "day") for (const h of houses) if (h.fac) { const t = performance.now() / 900 + h.id; for (let i = 0; i < 3; i++) { const k2 = (t + i / 3) % 1; ctx.fillStyle = `rgba(200,205,215,${.35 * (1 - k2)})`; ctx.beginPath(); ctx.arc(h.x + h.w - 6 + k2 * 6, h.y + 3 - k2 * 18, 2.5 + k2 * 4, 0, 6.28); ctx.fill(); } }
