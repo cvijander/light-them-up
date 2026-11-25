@@ -900,7 +900,7 @@ function scare(h, quiet) {
   if (h.state === "flee") return false;
   h.state = "flee"; h.fear = 0; h.fy = ENTRIES.reduce((a, e) => Math.abs(e - h.y) < Math.abs(a - h.y) ? e : a) + rnd(-6, 6);
   if (quiet) return true;
-  S.scared++; misProg("scare");
+  S.scared++; misProg("scare"); dailyInc("scare");
   const G = S.gang;
   if (h.x >= TURF_X && h.x < W && h.y > 0 && h.y < boundY()) {
     const z = zones.find(z => Math.hypot(z.x - h.x, z.y - h.y) < 60);
@@ -1342,6 +1342,89 @@ const CITY = (() => {
   return {query, build, bbox};
 })();
 
+// ---------- Daily tasks and the gift for every day in a row (one set for all quarters and towns, by the phone's calendar) ----------
+// Three tasks a day, the reward lands in the quarter you play when a task is done. The gift grows each day in a row, up to day 7.
+const DAILY_KEY = "lightThemUp.daily";
+const DAILY_T = {
+  fix:    {n:[6, 10], r:100, t:n => Tx`Popravi ili zameni sijalicu na lampama: ${n}`},
+  scare:  {n:[3, 6],  r:90,  t:n => Tx`Oteraj huligane: ${n}`},
+  thief:  {n:[2, 3],  r:90,  t:n => Tx`Uhvati lopove: ${n}`},
+  night:  {n:[2, 3],  r:80,  t:n => Tx`Dočekaj zoru: ${n} puta`},
+  install:{n:[3, 5],  r:80,  t:n => Tx`Postavi nove lampe: ${n}`},
+  mission:{n:[1, 2],  r:110, t:n => Tx`Ispuni noćne misije: ${n}`},
+};
+const giftFor = streak => 30 + 20 * Math.min(7, streak);   // day 1: 50 $, day 7 and later: 170 $
+const dayStr = (d = new Date()) => d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+function dailyGet() {
+  let d = null; try { d = JSON.parse(localStorage.getItem(DAILY_KEY) || "null"); } catch (e) {}
+  if (!d || typeof d !== "object" || !Array.isArray(d.tasks)) d = {day:"", tasks:[], streak:0, last:"", seen:true};
+  if (d.day !== dayStr()) {   // a new day: three new tasks (different kinds)
+    const kinds = Object.keys(DAILY_T).sort(() => Math.random() - .5).slice(0, 3);
+    d.day = dayStr(); d.seen = false;
+    d.tasks = kinds.map(k => { const T = DAILY_T[k], n = T.n[0] + Math.floor(Math.random() * (T.n[1] - T.n[0] + 1)); return {k, n, p:0, r:Math.round(T.r * (.8 + .2 * n / T.n[1]) / 10) * 10, done:false}; });
+  }
+  return d;
+}
+function dailySet(d) { try { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); } catch (e) {} }
+function dailyInc(k, amt = 1) {
+  if (!S.started) return;
+  const d = dailyGet(); let won = null;
+  for (const t of d.tasks) if (t.k === k && !t.done) { t.p = Math.min(t.n, t.p + amt); if (t.p >= t.n) { t.done = true; won = t; } }
+  dailySet(d);
+  if (won) {
+    S.money += won.r; S.led.bounty += won.r; SFX.win(); d.seen = false; dailySet(d);
+    const all = d.tasks.every(t => t.done);
+    banner(Tx("Dnevni zadatak ispunjen!"), Tx`${DAILY_T[won.k].t(won.n)} · +${won.r} $.` + (all ? " " + Tx("Sva tri zadatka za danas su gotova. Novi stižu sutra.") : ""));
+  }
+  goalsDot();
+}
+// the gift: once a day, the first time the game runs (not during the tutorial)
+function dailyGift() {
+  const d = dailyGet(), today = dayStr();
+  if (d.last === today) { dailySet(d); return; }
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  d.streak = d.last === dayStr(y) ? (d.streak || 0) + 1 : 1; d.last = today; d.seen = false;
+  const g = giftFor(d.streak); dailySet(d);
+  S.money += g; S.led.bounty += g; SFX.coin();
+  banner(d.streak > 1 ? Tx`Dan ${d.streak} zaredom!` : Tx("Dnevni poklon"), Tx`Poklon +${g} $. Dođi i sutra, poklon raste do 7. dana. Dnevni zadaci su pod dugmetom sa peharom.`);
+  recSet(r => { r.streak = Math.max(r.streak || 0, d.streak); });
+  goalsDot(); save();
+}
+let dailyT = 2;
+function dailyTick(dt) {   // checks the calendar now and then, so playing past midnight also gives new tasks and the gift
+  if (!S.started || S.paused || tut) return;
+  dailyT -= dt; if (dailyT > 0) return; dailyT = 20;
+  dailyGift();
+}
+// ---------- Goals panel (trophy button): daily tasks, and more tabs later ----------
+const GOAL_TABS = [{id:"daily", name:Tx("Dnevni zadaci"), draw:drawDaily}];
+let glTab = "daily", glWasPaused = false;
+function goalsOpen(tab) {
+  if (tab) glTab = tab; glWasPaused = S.paused; S.paused = true; setPauseLabel();
+  $("goals").hidden = false; goalsDraw();
+  const d = dailyGet(); d.seen = true; dailySet(d); goalsDot();
+}
+function goalsClose() { $("goals").hidden = true; S.paused = glWasPaused; setPauseLabel(); }
+function goalsDraw() {
+  const tabs = $("glTabs"); tabs.innerHTML = "";
+  if (GOAL_TABS.length > 1) for (const t of GOAL_TABS) { const b = document.createElement("button"); b.type = "button"; b.textContent = t.name; b.setAttribute("aria-pressed", String(t.id === glTab)); b.onclick = () => { glTab = t.id; goalsDraw(); }; tabs.appendChild(b); }
+  else tabs.innerHTML = `<b>${GOAL_TABS[0].name}</b>`;
+  const T = GOAL_TABS.find(t => t.id === glTab) || GOAL_TABS[0];
+  $("glBody").innerHTML = T.draw();
+}
+function drawDaily() {
+  const d = dailyGet(); dailySet(d);
+  const now = new Date(), mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), left = Math.max(0, mid - now) / 60000, h = Math.floor(left / 60), mi = Math.floor(left % 60);
+  const st = d.last === d.day ? d.streak || 1 : 0;
+  return (st ? `<div class="gl-gift"><span>${Tx`Dan ${st} zaredom`}</span><small>${Tx`Sutra poklon +${giftFor(st + 1)} $`}</small></div>` : "") +
+    d.tasks.map(t => `<div class="gl-task${t.done ? " done" : ""}"><div class="gl-tt"><span>${DAILY_T[t.k].t(t.n)}</span><b>+${t.r} $</b></div><div class="gl-bar"><em style="width:${Math.round(t.p / t.n * 100)}%"></em></div><small>${t.done ? Tx("Gotovo, nagrada je isplaćena") : t.p + " / " + t.n}</small></div>`).join("") +
+    `<p class="gl-note">${Tx`Novi zadaci za ${h} h ${mi} min.`} ${Tx("Zadaci važe u svim kvartovima i gradovima, a nagrada ide u kvart u kom igraš.")}</p>`;
+}
+function goalsDot() { const d = dailyGet(); $("btnGoals").classList.toggle("has", !d.seen); }
+$("btnGoals").onclick = () => { SFX.click(); goalsOpen(); };
+$("glClose").onclick = goalsClose;
+$("goals").addEventListener("click", e => { if (e.target === $("goals")) goalsClose(); });
+goalsDot();
 // ---------- Records: a few numbers that follow the player across games and towns ----------
 const REC_KEY = "lightThemUp.records";
 function recs() { try { return Object.assign({nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}, JSON.parse(localStorage.getItem(REC_KEY) || "{}")); } catch (e) { return {nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}; } }
@@ -1718,6 +1801,7 @@ function step(dt) {
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
       S.dawn = {night:S.night, net, day:Math.round(S.dayRate * DAY_LEN), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
         notes:[misLine, bigLine, tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
+      dailyInc("night"); { const dd = dailyGet(), nd = dd.tasks.filter(t => t.done).length; if (nd < dd.tasks.length) S.dawn.notes.push(Tx`Dnevni zadaci: gotovo ${nd} od ${dd.tasks.length}.`); }
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
     } else {
@@ -1814,6 +1898,7 @@ function step(dt) {
         else if (j.type === "bulb") { s.lamp.m = j.m; s.lamp.life = 1; s.lamp.warn = 0; if (s.lamp.state === "burnt") s.lamp.state = "ok"; float(s.x, s.y - 14, Tx`Nova sijalica: ${j.m.b.name}`, "#7ed39a"); }
         else { if (j.wb) { s.lamp.life = 1; s.lamp.warn = 0; } s.lamp.state = s.lamp.life > 0 ? "ok" : "burnt"; s.lamp.hp = LAMP_HP; float(s.x, s.y - 14, s.lamp.state === "ok" ? Tx("Popravljeno") : Tx("Popravljeno, fali sijalica"), s.lamp.state === "ok" ? "#7ed39a" : "#f1c453"); }
         burst(s.x, s.y, "rgb(" + s.lamp.m.col + ")", 14, 70); SFX.done();
+        dailyInc(j.type === "install" ? "install" : "fix");
         s.job = null; jobs.splice(jobs.indexOf(j), 1); v.job = null; v.state = "return"; v.path = route(v, v.home);
         save();
       }
@@ -2228,7 +2313,7 @@ function misText(m) {
 function misWin() {
   const m = S.mission; if (!m || m.done || m.fail) return;
   m.done = true; S.money += m.reward; SFX.win(); S.led.bounty += m.reward;
-  burst(W / 2, 120, "#7ed39a", 30, 140); banner(Tx("Misija uspela!"), Tx`+${m.reward} $ nagrade.`);
+  burst(W / 2, 120, "#7ed39a", 30, 140); banner(Tx("Misija uspela!"), Tx`+${m.reward} $ nagrade.`); dailyInc("mission");
 }
 function misFail(why) {
   const m = S.mission; if (!m || m.done || m.fail) return;
@@ -2256,7 +2341,7 @@ function spawnThief() {
 }
 function catchThief(t, how) {
   SFX.catch();
-  t.gone = true; recInc("thieves"); const prize = THIEF.reward + t.loot;
+  t.gone = true; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
   S.money += prize; S.led.bounty += THIEF.reward; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
   burst(t.x, t.y, "#f1c453", 16, 80); float(t.x, t.y - 14, Tx`Lopov uhvaćen! +${prize} $`, "#7ed39a", true);
   msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
@@ -2998,7 +3083,7 @@ function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
-  tutTick(dt);
+  tutTick(dt); dailyTick(dt);
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
   requestAnimationFrame(frame);

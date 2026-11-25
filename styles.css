@@ -272,3 +272,28 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
   body.shop-open .tool .short{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Goals panel (trophy button): daily tasks, medals, decorations */
+.goals-btn{position:relative}
+.goals-btn.has::after{content:"";position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--panel)}
+.gl{z-index:55}
+.gl-card{max-width:460px;max-height:min(640px,100%)}
+.gl-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gl-head b{font-family:var(--display);font-size:24px;text-transform:uppercase;color:var(--sodium)}
+.gl-tabs{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+.gl-tabs button{height:36px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);font-weight:600;cursor:pointer}
+.gl-tabs button[aria-pressed="true"]{background:var(--sodium);color:#1c1206;border-color:var(--sodium)}
+.gl-body{display:grid;gap:8px;align-content:start}
+.gl-gift{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,rgba(255,168,72,.22),rgba(255,168,72,.06));border:1px solid rgba(255,168,72,.5)}
+.gl-gift span{font-family:var(--display);font-size:20px;color:var(--sodium)}
+.gl-gift small{color:var(--ink);font-size:13px}
+.gl-task{padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);display:grid;gap:6px}
+.gl-task.done{border-color:rgba(126,211,154,.6)}
+.gl-tt{display:flex;justify-content:space-between;gap:10px;font-size:14.5px;line-height:1.3}
+.gl-tt b{color:var(--good);white-space:nowrap}
+.gl-bar{height:8px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+.gl-bar em{display:block;height:100%;background:var(--sodium);border-radius:5px}
+.gl-task.done .gl-bar em{background:var(--good)}
+.gl-task small{color:var(--muted);font-size:12px}
+.gl-task.done small{color:var(--good)}
+.gl-note{color:var(--muted);font-size:12.5px;line-height:1.4;margin:2px 0 0}
+@media (max-width:420px){ header{gap:5px} header .icon-btn{padding:0 8px;min-width:38px} }

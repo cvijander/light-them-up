@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261125e">
+<link rel="stylesheet" href="styles.css?v=20261125f">
 </head>
 <body>
 
@@ -23,6 +23,7 @@
       <button class="icon-btn" id="btnPause" type="button">Pauza</button>
       <button class="icon-btn" id="btnSound" type="button" aria-label="Zvuk"></button>
       <select class="icon-btn lang-sel" id="langSel" aria-label="Jezik"></select>
+      <button class="icon-btn goals-btn" id="btnGoals" type="button" aria-label="Zadaci i medalje"><svg class="svg-ico" viewBox="0 0 24 24" fill="none" stroke="#f1c453" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/></svg></button>
       <button class="icon-btn" id="btnHelp" type="button" aria-label="Pomoć">?</button>
     </header>
     <div class="hud">
@@ -131,6 +132,7 @@
 
 <div class="tut-hand" id="tutHand" hidden aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#f1c453" stroke-width="2.5"/><circle class="dot" cx="12" cy="12" r="4" fill="#f1c453"/></svg><span class="finger">👆</span></div>
 <div class="tut" id="tut" hidden role="dialog" aria-live="polite"><b id="tutT"></b><p id="tutS"></p><div class="tut-btns"><button class="ghost" id="tutSkip" type="button">Preskoči</button><button class="tut-next" id="tutNext" type="button">Dalje</button></div></div>
+<div class="overlay gl" id="goals" hidden><div class="card gl-card" role="dialog" aria-label="Zadaci i medalje"><div class="gl-head"><div class="gl-tabs" id="glTabs"></div><button class="icon-btn" id="glClose" type="button">Zatvori</button></div><div class="card-body gl-body" id="glBody"></div></div></div>
 <div class="overlay" id="ov">
   <div class="card" role="dialog" aria-labelledby="ovTitle">
     <div class="card-body">
@@ -165,8 +167,8 @@
   </div>
 </div>
 
-<script src="i18n.js?v=20261125e"></script>
-<script src="borca-map.js?v=20261125e"></script>
-<script src="game.js?v=20261125e"></script>
+<script src="i18n.js?v=20261125f"></script>
+<script src="borca-map.js?v=20261125f"></script>
+<script src="game.js?v=20261125f"></script>
 </body>
 </html>
