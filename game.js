@@ -133,9 +133,9 @@ const stars = () => 1 + STAR_AT.filter(v => S.rep >= v).length;
 const starStr = n => "★".repeat(n) + "☆".repeat(5 - n);
 const STAR_PERK = [Tx("Osnovni nivo"), Tx("Stanari plaćaju 5% više"), Tx("Tenderi plaćaju 15% više"), Tx("LED čip 15% jeftiniji i stanari javljaju lopove"), Tx("Grad daje +60 $ svake zore i popravke su 20% jeftinije")];
 const TARIFF = 1.4;   // expensive power night: +40%
-const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10;   // paid every dawn
+const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10 + Object.keys(S.mgr || {}).length * MGR_WAGE;   // paid every dawn
 
-const DEFAULTS = () => ({money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
+const DEFAULTS = () => ({mgr:{}, money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
   order:0, scared:0, broken:0, flashCd:0, spawnT:10, used:0, inc:0, cover:0, coverT:0, goal:0, banner:null,
   night:1, phase:"night", phaseT:NIGHT_LEN, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
@@ -515,7 +515,7 @@ let NOSAVE = false;   // set when this town was just parked, so a reload cannot 
 function save() {
   if (!S.started || NOSAVE) return;
   try {
-    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate"];
+    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr"];
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
@@ -1156,6 +1156,7 @@ $("upSolar").onclick = () => { if (S.unlocked && !S.solar && S.money >= SOLAR_CO
 $("upUps").onclick = () => { if (!S.ups && S.money >= UPS_COST) { S.money -= UPS_COST; S.led.buy += UPS_COST; S.ups = true; S.upsCharge = UPS_SEC; SFX.buy(); msg(Tx`UPS baterija: kad generator stane, svetla rade još ${UPS_SEC} sekundi.`); save(); } };
 $("upDispatch").onclick = () => { if (S.dispatch) { S.dispOff = !S.dispOff; SFX.click(); msg(S.dispOff ? Tx("Auto-dispečing je ISKLJUČEN: štediš novac, lampe popravljaš sam.") : Tx("Auto-dispečing je UKLJUČEN: servis sam ide na kvarove.")); save(); return; }
   if (!S.dispatch && S.money >= DISPATCH_COST) { S.money -= DISPATCH_COST; S.led.buy += DISPATCH_COST; S.dispatch = true; SFX.buy(); msg(Tx("Auto-dispečing je uključen: servis sam ide na razbijene i izgorele lampe.")); save(); } };
+$("upMgr").onclick = () => mgrHire();
 $("upLoan").onclick = () => { if (S.loan <= 0) { S.money += LOAN_AMOUNT; S.loan = LOAN_BACK; SFX.coin(); msg(Tx`Banka ti je dala ${LOAN_AMOUNT} $. Svake zore ide rata od ${LOAN_RATE} $ dok ne vratiš ${LOAN_BACK} $.`); save(); } };
 $("upPlot").onclick = () => { if (MAP) { autoQuarter(); return; } if (!S.unlocked && S.money >= PLOT_COST) { S.money -= PLOT_COST; S.led.buy += PLOT_COST; S.unlocked = true; if (S.goal === 1) S.goal = 2; banner(Tx("Kupio si stari kvart!"), Tx`Ovde vole klasično, toplo svetlo. Uz plac dobijaš i mali generator: +${PLOT_GEN} struje.`); save(); } };
 
@@ -1626,7 +1627,7 @@ let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => { if (document.hidden) { hiddenAt = Date.now(); save(); if (S.started && !S.paused) $("btnPause").click(); } else if (hiddenAt && S.started) { const t = hiddenAt; hiddenAt = 0; awayReport(t); } });
 window.addEventListener("pagehide", save);
 
-const UP_ICO = {upCrane:"crane", upArmor:"armor", upInd:"factory", upCen:"center", upHeat:"heat", upFixAll:"fixall", upSensor:"sensor", upGlass:"glass", upDispatch:"dispatch", upLoan:"bank", upTender:"tender", upGen:"gen", upTrafo:"bolt", upSolar:"sun", upUps:"ups", upGenFix:"wrench", upVan:"van", upSpeed:"van", upPlot:"plot"};
+const UP_ICO = {upCrane:"crane", upArmor:"armor", upInd:"factory", upCen:"center", upHeat:"heat", upFixAll:"fixall", upSensor:"sensor", upGlass:"glass", upDispatch:"dispatch", upMgr:"wrench", upLoan:"bank", upTender:"tender", upGen:"gen", upTrafo:"bolt", upSolar:"sun", upUps:"ups", upGenFix:"wrench", upVan:"van", upSpeed:"van", upPlot:"plot"};
 function setUp(el, title, desc, cost) {
   const can = cost != null && S.money >= cost, ic = UP_ICO[el.id];
   el.innerHTML = Tx`<b>${ic ? svgI(SHOP_ICO[ic] || TY_ICO[ic], "svg-ico up-ico") : ""}${title}</b><span>${desc}</span><span>${cost == null ? Tx("Maksimum") : Tx`<em>${cost} $</em>`}</span>`;
@@ -1693,6 +1694,8 @@ function updateUI() {
   for (const id of ["upCrane", "upArmor", "upInd", "upCen"]) if ($(id).disabled) $(id).querySelector("span:last-child").textContent = Tx("Kupljeno");
   setUp($("upHeat"), Tx("Toplotna mapa zadovoljstva"), Tx("Kuće obojene po zadovoljstvu: zeleno srećni, crveno nezadovoljni (taster H)"), null);
   { const e = $("upHeat"); e.disabled = false; e.querySelector("span:last-child").innerHTML = S.heat ? Tx('<span class="sw on">UKLJ</span>') : Tx('<span class="sw">ISKLJ</span>'); }
+  { const n = Object.keys(S.mgr).length, free = MGR_AREAS().filter(([a]) => !S.mgr[a]).length;
+    setUp($("upMgr"), Tx("Majstor za deo kvarta"), n ? Tx`Imaš ${n}: ${Object.keys(S.mgr).map(mgrName).join(", ")}. Plata ${MGR_WAGE} $ po zori.` : Tx`Sam održava jedan deo kvarta: popravlja i menja istrošene sijalice danju, upola cene. Plata ${MGR_WAGE} $ po zori.`, free && n < MGR_COST.length ? MGR_COST[n] : null); }
   setUp($("upLoan"), Tx("Kredit u banci"), S.loan > 0 ? Tx`Dug ${S.loan} $, rata ${LOAN_RATE} $ svake zore` : Tx`+${LOAN_AMOUNT} $ odmah, vraćaš ${LOAN_BACK} $ u ratama`, null);
   { const e = $("upLoan"); e.disabled = S.loan > 0; e.querySelector("span:last-child").innerHTML = S.loan > 0 ? Tx("Otplaćuješ") : Tx`<em>+${LOAN_AMOUNT} $</em>`; e.classList.remove("cant"); }
   { const e = $("upTender"), T = S.tender; e.innerHTML = Tx`<b>${svgI(TY_ICO.tender, "svg-ico up-ico")}Gradski tender</b><span>${T ? tenderText(T) : S.night < 3 ? Tx("Grad nudi tendere od 3. noći") : Tx("Novi tender stiže uskoro")}</span><span>${svgI(TY_ICO.star, "svg-ico up-ico")}${starStr(stars())} ${S.rep}/100 · ${STAR_PERK[stars() - 1]} · struja −${Math.round(repDiscount() * 100)}%</span>`; e.disabled = false; }
@@ -1716,7 +1719,7 @@ function updateUI() {
   else if (s2 && s2.lamp) {
     const L = s2.lamp, [mood, why] = moodOf(s2, L.m);
     const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${fixCost(L)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${swapCost(L)} $ (duplo, jer je izgorela)` : !L.powered ? Tx("bez struje, generator je pun") : wearLv(L) ? Tx`radi, ${wearName(wearLv(L))}: dodir = nova sijalica ${swapCost(L)} $` : Tx("radi");
-    html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`;
+    html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`; if (mgrHas(s2)) html += "<br>" + Tx`Ovaj deo održava majstor (${mgrName(mgrArea(s2))}).`;
   } else if (s2) html = Tx`<b>${s2.zone === "park" ? Tx("Mesto u parku") : s2.district === "stari" ? Tx("Mesto u starom kvartu") : Tx("Prazno mesto na ulici")}</b><br>${toolModel() ? Tx`Dodir = radar, drugi dodir = montaža (${toolModel().name}, ${toolModel().cost} $)` : Tx("Izaberi svetiljku, pa dodirni ovde.")}`;
   else { const L = S.led, r = v => Math.round(v);
     html = Tx`<b>Novac od prošle zore</b><br>Stanari +${r(L.pay)} $ · nagrade +${r(L.bounty)} $ · struja −${r(L.fuel)} $ · kupovina i popravke −${r(L.buy)} $${L.theft ? Tx` · lopovi −${r(L.theft)} $` : ""}` +
@@ -2212,8 +2215,8 @@ function awayReport(t0) {
   }
   // auto-dispatch fixes what it can pay for (day prices), cheapest first
   let fixed = 0, fixCost = 0;
-  if (S.dispatch && !S.dispOff) {
-    const todo = slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state === "broken" || s.lamp.state === "burnt")).map(s => {
+  if (S.dispatch && !S.dispOff || Object.keys(S.mgr || {}).length) {
+    const todo = slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state === "broken" || s.lamp.state === "burnt") && (S.dispatch && !S.dispOff || mgrHas(s))).map(s => {
       const L = s.lamp, c = Math.ceil((L.state === "broken" ? L.m.repair + (L.life <= .05 ? L.m.bulbCost : 0) : L.m.bulbCost) * .5); return {s, c}; }).sort((a, b) => a.c - b.c);
     for (const {s, c} of todo) { if (S.money < c) break; S.money -= c; fixCost += c; fixed++; const L = s.lamp; if (L.state === "broken" && L.life > .05) L.state = "ok"; else { L.life = 1; L.state = "ok"; } L.hp = LAMP_HP; }
   }
@@ -2249,6 +2252,40 @@ function autoDispatch(dt) {
   msg(Tx`Auto-dispečing: servis sam kreće na ${L.state === "broken" ? "popravku" : Tx("zamenu sijalice")} (${cost} $).`);
 }
 
+
+// ---------- Managers: a foreman looks after one part of the quarter by himself ----------
+// He uses the same service vans (more vans = faster work). Auto-dispatch only reacts to broken and burnt lamps in the whole quarter;
+// a foreman also changes worn bulbs in his part before they burn out, by day when it is half price (at night only the urgent ones, under 15%).
+const MGR_COST = [150, 220, 300], MGR_WAGE = 15;
+const MGR_AREAS = () => MAP ? [["w", Tx("Zapadni deo")], ["m", Tx("Srednji deo")], ["e", Tx("Istočni deo")]]
+  : [["n", Tx("Gornji deo")], ["s", Tx("Donji deo")], ...(S.unlocked ? [["o", Tx("Stari kvart")]] : [])];
+const mgrArea = s => MAP ? (s.x < W / 3 ? "w" : s.x < W * 2 / 3 ? "m" : "e") : s.y > LOCK_Y ? "o" : s.y < 340 ? "n" : "s";
+const mgrName = a => (MGR_AREAS().find(x => x[0] === a) || [a, a])[1];
+const mgrHas = s => !!(S.mgr && S.mgr[mgrArea(s)]);
+let mgrT = 1, mgrMsgT = 0;
+function mgrHire() {
+  const n = Object.keys(S.mgr).length, free = MGR_AREAS().filter(([a]) => !S.mgr[a]);
+  if (!free.length || n >= MGR_COST.length) { msg(Tx("Svaki deo kvarta već ima svog majstora.")); return; }
+  const cost = MGR_COST[n]; if (S.money < cost) { msg(Tx`Majstor košta ${cost} $.`, true); SFX.err(); return; }
+  const lampsIn = a => slots.filter(s => s.lamp && avail(s) && mgrArea(s) === a).length;
+  const [a, name] = free.sort((x, y) => lampsIn(y[0]) - lampsIn(x[0]))[0];   // the part with the most lamps first
+  S.money -= cost; S.led.buy += cost; S.mgr[a] = 1; SFX.win();
+  banner(Tx`Majstor za ${name}`, Tx`Sam popravlja kvarove i menja istrošene sijalice u tom delu, danju upola cene. Plata ${MGR_WAGE} $ svake zore. Treba mu servisni kombi, pa je sa više kombija brže.`);
+  save();
+}
+function mgrTick(dt) {
+  if (!S.started || !S.mgr) return; mgrMsgT -= dt;
+  mgrT -= dt; if (mgrT > 0) return; mgrT = 1.5;
+  for (const a in S.mgr) {
+    const todo = slots.filter(s => s.lamp && !s.job && avail(s) && mgrArea(s) === a && (s.lamp.state !== "ok" || wearLv(s.lamp) >= (S.phase === "day" ? 2 : 3)));
+    if (!todo.length) continue;
+    todo.sort((x, y) => (y.lamp.state === "broken" ? 2 : y.lamp.state === "burnt" ? 1 : 0) - (x.lamp.state === "broken" ? 2 : x.lamp.state === "burnt" ? 1 : 0));
+    const s = todo[0], L = s.lamp, cost = fixCost(L);
+    if (S.money < cost + 20) continue;   // keeps a small reserve, like auto-dispatch
+    order(s, L.state === "broken" ? "repair" : "bulb", L.m, cost);
+    if (mgrMsgT <= 0) { mgrMsgT = 6; msg(Tx`Majstor (${mgrName(a)}) šalje servis: ${L.state === "broken" ? Tx("popravka") : Tx("nova sijalica")} (${cost} $).`); }
+  }
+}
 // ---------- City tenders: multi-day goals with a big payout ----------
 function newTender() {
   const parkSlots = slots.filter(s => s.zone === "park");
@@ -3083,7 +3120,7 @@ function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
-  tutTick(dt); dailyTick(dt);
+  tutTick(dt); dailyTick(dt); if (!hold) mgrTick(dt);
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
   requestAnimationFrame(frame);
