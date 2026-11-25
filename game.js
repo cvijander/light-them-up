@@ -369,8 +369,8 @@ function spawnPedMap() {
   const nodes = MN.map((p, i) => i).filter(i => MADJ[i].length && MN[i].x > 0 && MN[i].x < W && MN[i].y > 0 && MN[i].y < H); if (nodes.length < 2) return;
   const fromEdge = XS.length && Math.random() < .5, A = fromEdge ? XS[Math.random() * XS.length | 0] : null, a = A ? A.inN : nodes[Math.random() * nodes.length | 0];
   const far = nodes.filter(i => Math.hypot(MN[i].x - MN[a].x, MN[i].y - MN[a].y) > 200), b = (far.length ? far : nodes)[Math.random() * (far.length || nodes.length) | 0], p = mpath(a, b); if (!p || p.length < 2) return;
-  const st = A ? {x:A.x, y:A.y} : MN[a];
-  const ped = {path:[...p.map(i => MN[i])], i:0, bx:st.x, by:st.y, ang:0, lane:Math.random() < .5 ? -21 : 21, col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(16, 22), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false};
+  const st = A ? {x:A.x, y:A.y} : MN[a], dog = Math.random() < .25;
+  const ped = {path:[...p.map(i => MN[i])], i:0, bx:st.x, by:st.y, ang:0, lane:Math.random() < .5 ? -21 : 21, col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(16, 22), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false, dog};
   movePath(ped, 0); peds.push(ped);
 }
 function polyPath(c, f) { c.beginPath(); c.moveTo(f[0], f[1]); for (let i = 2; i < f.length; i += 2) c.lineTo(f[i], f[i + 1]); c.closePath(); }
@@ -428,15 +428,21 @@ function drawBgMap(c) {
   c.save(); c.translate(GOFF.x, GOFF.y);
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5); }
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
-  c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
+  { const zg = 12 * (ISO ? 1.5 : 1); box3(c, 13, 122, 4, 4, zg + 9, "#2b2f36"); const o = box3(c, 11, 128, 36, 32, zg, "#56606f");   // the generator house with an exhaust stack
+    c.fillStyle = "#333a46"; c.fillRect(16 + o.x, 132 + o.y, 10, 8); c.fillRect(30 + o.x, 132 + o.y, 10, 8); c.fillStyle = "rgba(0,0,0,.35)"; for (let y = 133; y < 140; y += 2) { c.fillRect(17 + o.x, y + o.y, 8, .8); c.fillRect(31 + o.x, y + o.y, 8, .8); }   // roof vents
+    c.fillStyle = "#f1c453"; c.fillRect(13 + o.x * .3, 160 + o.y * .3, 8, 2); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, lblFree(GOFF.x + 29, GOFF.y + 177, 12) ? 177 : 132); c.restore();
   c.save(); c.translate(DEPR.x - 548, DEPR.y - 104);
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
-  for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(552, 108 + i * 26); c.lineTo(610, 108 + i * 26); c.stroke(); }   // four bays, one for each van
-  c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.translate(600, 160); c.rotate(Math.PI/2); c.fillText(Tx("SERVIS"), 0, 0); c.restore();
+  for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(552, 128 + i * 22); c.lineTo(610, 128 + i * 22); c.stroke(); }   // four bays, one for each van
+  { const o = box3(c, 548, 104, 66, 20, 14 * (ISO ? 1.5 : 1), "#5d6a7a");   // the service garage: roller doors on the front, the name on the roof
+    for (let i = 0; i < 3; i++) { const x0 = 552 + i * 21, x1 = x0 + 16; c.fillStyle = "#3b4350"; c.beginPath(); c.moveTo(x0, 124); c.lineTo(x1, 124); c.lineTo(x1 + o.x * .75, 124 + o.y * .75); c.lineTo(x0 + o.x * .75, 124 + o.y * .75); c.closePath(); c.fill();
+      c.strokeStyle = "rgba(0,0,0,.35)"; c.lineWidth = .6; for (let t = .15; t < .75; t += .12) { c.beginPath(); c.moveTo(x0 + o.x * t, 124 + o.y * t); c.lineTo(x1 + o.x * t, 124 + o.y * t); c.stroke(); } }
+    c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText(Tx("SERVIS"), 581 + o.x, 118 + o.y); }
+  c.restore();
 }
 let gridPts = null, gridBy = -1;
 function coverPts() { if (MAP) return COVER_PTS; const by = boundY(); if (by !== gridBy) { gridBy = by; gridPts = []; for (let x = 10; x < W; x += 20) for (let y = 10; y < by; y += 20) gridPts.push([x, y]); } return gridPts; }
@@ -470,7 +476,7 @@ function newLamp(m, life = 1) { return {m, life, hp:LAMP_HP, state:"ok", order:S
 const vanGate = v => MAP ? {x:DEPOT.x, y:DEPOT.y} : {x:DEPOT.x, y:v.home.y};
 const vanRoute = (v, q) => v.state === "home" ? [vanGate(v), ...route(vanGate(v), q)] : route(v, q);
 const vanBack = v => [...route(v, vanGate(v)), {x:v.home.x, y:v.home.y}];
-function addVan() { const i = vans.length, hm = {x:DEPR.x + 31, y:DEPR.y + 17 + (i % 4) * 26}, v = {i, x:hm.x, y:hm.y, home:hm, path:[], state:"home", job:null, t:0}; const g = vanGate(v); v.ang = Math.atan2(g.y - hm.y, g.x - hm.x); vans.push(v); }
+function addVan() { const i = vans.length, hm = {x:DEPR.x + 31, y:DEPR.y + 35 + (i % 4) * 22}, v = {i, x:hm.x, y:hm.y, home:hm, path:[], state:"home", job:null, t:0}; const g = vanGate(v); v.ang = g.x < hm.x ? Math.PI : 0; vans.push(v); }   // straight in its bay, nose toward the street
 function startLamps() {
   if (MAP) return startLampsMap();
   const at = (rx, ry) => slots.find(s => s.rx === rx && s.ry === ry);
@@ -632,6 +638,11 @@ const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 
 function lblFree(x, y, hw) { const p = proj(x, y); return slots.every(sl => { const q = proj(sl.x, sl.y), d = q.y - p.y; return Math.abs(q.x - p.x) > hw + 46 || d <= -16 || d >= 30; }); }
 function lblSpot(x, y, hw, tries = [[0, 0], [0, 22], [0, -34], [-50, 0], [50, 0], [0, 40], [0, -52], [-50, 22], [50, 22]]) { const p = proj(x, y);   // moves are on the screen
   for (const [dx, dy] of tries) { const q = unproj(p.x + dx, p.y + dy); if (lblFree(q.x, q.y, hw)) return [q.x, q.y]; } return [x, y]; }
+// A small building in the map picture: front (lit) and side wall, roof lifted by z, like the houses. Returns the roof offset.
+function box3(c, X0, Y0, w, h, z, rc) { const o = up(z), X1 = X0 + w, Y1 = Y0 + h, q = (pts, col) => { c.fillStyle = col; c.beginPath(); pts.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); };
+  c.fillStyle = "rgba(0,0,0,.35)"; for (let k = 0; k <= 1; k += .5) c.fillRect(X0 + SHV.x * z * k, Y0 + SHV.y * z * k, w, h);
+  q([[X0, Y1], [X1, Y1], [X1 + o.x, Y1 + o.y], [X0 + o.x, Y1 + o.y]], shade(rc, .62)); q([[X1, Y0], [X1, Y1], [X1 + o.x, Y1 + o.y], [X1 + o.x, Y0 + o.y]], shade(rc, .44));
+  c.fillStyle = rc; c.fillRect(X0 + o.x, Y0 + o.y, w, h); c.fillStyle = "rgba(255,255,255,.16)"; c.fillRect(X0 + o.x, Y0 + o.y, w, 1.2); c.fillRect(X0 + o.x, Y0 + o.y, 1.2, h); return o; }
 const shade = (col, k) => { const n = parseInt(col.slice(1), 16), f = v => Math.round(Math.max(0, Math.min(255, v * k))); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const badgeK = () => clamp(668 / osW, .3, MAP ? 1.7 : 1.3);   // map badges: about 14 px text on any screen
 let CBX = null;   // projected bounds of the playable part (houses and lamp spots)
@@ -715,15 +726,21 @@ function drawBg() {
   // generator
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(10, 118, 48, 84); c.fillStyle = "#262b35"; c.fillRect(6, 194, 46, 5); }
   c.fillStyle = "#39414f"; c.fillRect(6, 112, 46, 82);
-  c.fillStyle = "#2a303b"; c.fillRect(11, 120, 36, 40);
   for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? "#222" : "#d8b23a"; c.fillRect(6 + i * 7.67, 186, 7.67, 8); }
+  { const zg = 12 * (ISO ? 1.5 : 1); box3(c, 13, 122, 4, 4, zg + 9, "#2b2f36"); const o = box3(c, 11, 128, 36, 32, zg, "#56606f");   // the generator house with an exhaust stack
+    c.fillStyle = "#333a46"; c.fillRect(16 + o.x, 132 + o.y, 10, 8); c.fillRect(30 + o.x, 132 + o.y, 10, 8); c.fillStyle = "rgba(0,0,0,.35)"; for (let y = 133; y < 140; y += 2) { c.fillRect(17 + o.x, y + o.y, 8, .8); c.fillRect(31 + o.x, y + o.y, 8, .8); }   // roof vents
+    c.fillStyle = "#f1c453"; c.fillRect(13 + o.x * .3, 160 + o.y * .3, 8, 2); }
   c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText("GEN", 29, lblFree(29, 177, 12) ? 177 : 132);
   // depot
   if (!ISO) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(552, 110, 66, 114); c.fillStyle = "#272b31"; c.fillRect(548, 216, 66, 6); }
   c.fillStyle = "#3a3f47"; c.fillRect(548, 104, 66, 112);
   c.strokeStyle = "#d8d2b8"; c.lineWidth = 1;
-  for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(552, 108 + i * 26); c.lineTo(610, 108 + i * 26); c.stroke(); }   // four bays, one for each van
-  c.fillStyle = "#cfd5df"; c.save(); c.translate(600, 160); c.rotate(Math.PI/2); c.fillText(Tx("SERVIS"), 0, 0); c.restore();
+  for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(552, 128 + i * 22); c.lineTo(610, 128 + i * 22); c.stroke(); }   // four bays, one for each van
+  { const o = box3(c, 548, 104, 66, 20, 14 * (ISO ? 1.5 : 1), "#5d6a7a");   // the service garage: roller doors on the front, the name on the roof
+    for (let i = 0; i < 3; i++) { const x0 = 552 + i * 21, x1 = x0 + 16; c.fillStyle = "#3b4350"; c.beginPath(); c.moveTo(x0, 124); c.lineTo(x1, 124); c.lineTo(x1 + o.x * .75, 124 + o.y * .75); c.lineTo(x0 + o.x * .75, 124 + o.y * .75); c.closePath(); c.fill();
+      c.strokeStyle = "rgba(0,0,0,.35)"; c.lineWidth = .6; for (let t = .15; t < .75; t += .12) { c.beginPath(); c.moveTo(x0 + o.x * t, 124 + o.y * t); c.lineTo(x1 + o.x * t, 124 + o.y * t); c.stroke(); } }
+    c.fillStyle = "#cfd5df"; c.font = "700 11px Barlow Condensed, sans-serif"; c.textAlign = "center"; c.fillText(Tx("SERVIS"), 581 + o.x, 118 + o.y); }
+
 }
 
 // ---------- Rules ----------
@@ -2233,17 +2250,20 @@ function drawTraffic() {
 // ---------- Pedestrians: worried in the dark, happy under the lamps ----------
 const PED_COLS = ["#e07a5f", "#81b29a", "#f2cc8f", "#a5a6f6", "#9ad1d4", "#e5989b"];
 function updatePeds(dt) {
+  updateStrays(dt);
   if (MAP && peds.length < 6 && Math.random() < dt * .35) spawnPedMap();
   else if (!MAP && peds.length < 5 && Math.random() < dt * .35) {
     const by = boundY(), vert = Math.random() < .5, dir = Math.random() < .5 ? 1 : -1, side = Math.random() < .5 ? -17 : 17;
-    const p = {vert, dir, col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(16, 22), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false};
+    const p = {vert, dir, ang:vert ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (dir > 0 ? 0 : Math.PI), col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(16, 22), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false, dog:Math.random() < .25};
     if (vert) { p.x = VS[Math.random() * VS.length | 0] + side; p.y = dir > 0 ? -8 : by + 8; } else { const ys = hs(); p.y = ys[Math.random() * ys.length | 0] + side; p.x = dir > 0 ? -8 : W + 8; }
     peds.push(p);
   }
   const night = S.phase === "night", by = boundY();
   for (const p of peds) {
-    const lit = !night || litAt(p.x, p.y, LIGHT_K), sp = p.sp * (night && !lit ? 1.4 : 1) * dt;   // they hurry through the dark
-    if (p.path) movePath(p, sp); else if (p.vert) p.y += sp * p.dir; else p.x += sp * p.dir; p.bob += dt * 9;
+    const lit = !night || litAt(p.x, p.y, LIGHT_K);
+    if (p.chat > 0) p.chat -= dt; else if (night && lit && !p.chatted && Math.random() < dt * .25) { const o = peds.find(q => q !== p && !(q.chat > 0) && Math.hypot(q.x - p.x, q.y - p.y) < 30); if (o) { p.chat = o.chat = 3.5; p.chatted = o.chatted = true; } }   // two people meet under a lamp and stop to talk
+    const sp = p.sp * (night && !lit ? 1.4 : night ? .75 : 1) * (p.chat > 0 ? 0 : 1) * dt;   // they hurry through the dark and stroll under the lamps
+    if (p.path) movePath(p, sp); else if (p.vert) p.y += sp * p.dir; else p.x += sp * p.dir; if (sp > 0) p.bob += dt * 9 * (night && !lit ? 1.3 : 1);
     p.moodT = Math.max(0, p.moodT - dt);
     if (night && !lit && !p.worried && p.moodT <= 0) { p.worried = true; p.mood = -1; p.moodT = 2.2; }
     if (night && lit && p.worried && !p.happy) { p.happy = true; p.mood = 1; p.moodT = 2; S.money += 1; S.led.bounty += 1; float(p.x, p.y - 18, "+1", "#7ed39a"); }
@@ -2264,12 +2284,67 @@ function drawPeds() {
       ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.roundRect(-2.6, -11.6, 2.2, 5.6, 1.1); ctx.fill();   // light side
       ctx.fillStyle = "#f1d3b3"; ctx.beginPath(); ctx.arc(0, -14.6, 2.5, 0, 6.28); ctx.fill();   // head
       ctx.fillStyle = p.hair; ctx.beginPath(); ctx.arc(0, -15.3, 2.6, 3.3, 6.1); ctx.fill();   // hair
+      if (p.dog) { const dx = (Math.cos(p.ang || 0) >= 0 ? 7 : -7), db = Math.abs(Math.sin(p.bob * 1.6)) * .8, f = dx > 0 ? 1 : -1;   // a small dog on a lead, a step ahead
+        ctx.strokeStyle = "rgba(220,220,220,.5)"; ctx.lineWidth = .5; ctx.beginPath(); ctx.moveTo(f * 3.5, -7); ctx.lineTo(dx - f * 1.5, -3.2 - db); ctx.stroke();
+        ctx.fillStyle = "#8a6a48"; ctx.beginPath(); ctx.roundRect(dx - 2.8, -3.6 - db, 5.6, 2.6, 1.2); ctx.fill(); ctx.fillRect(dx - 2.4, -1.2 - db, 1, 1.4 + db); ctx.fillRect(dx + 1.5, -1.2 - db, 1, 1.4 + db);
+        ctx.beginPath(); ctx.arc(dx + f * 3, -4.2 - db, 1.5, 0, 6.28); ctx.fill(); ctx.fillStyle = "#5a4330"; ctx.fillRect(dx + f * 2.6 - .5, -6 - db, 1, 1.4); }
       if (p.torch && S.phase === "night") { const hx = Math.cos(p.ang || 0) >= 0 ? 3.6 : -3.6; ctx.fillStyle = "#fff4c2"; ctx.shadowColor = "#fff0a0"; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(hx + sw * .5, -6.2, 1.3, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0; }   // the torch in the hand
       ctx.restore(); });
+    if (p.chat > 0 && !(p.moodT > 0)) uprightAt(ctx, p.x, p.y, () => { const bx = p.x + 4, bY = p.y - 18 * k - 6; ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.beginPath(); ctx.roundRect(bx - 5, bY - 3.5, 10, 7, 3); ctx.fill(); ctx.fillStyle = "#475569"; for (let d = -1; d <= 1; d++) { ctx.beginPath(); ctx.arc(bx + d * 2.6, bY, .9, 0, 6.28); ctx.fill(); } });   // talking
     if (p.moodT > 0) uprightAt(ctx, p.x, p.y, () => {   // emotion bubble above the head
       const bx = p.x, bY = p.y - 18 * k - 8;
       ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.beginPath(); ctx.arc(bx, bY, 6, 0, 6.28); ctx.fill(); ctx.beginPath(); ctx.moveTo(bx - 2, bY + 4); ctx.lineTo(bx, bY + 8); ctx.lineTo(bx + 2, bY + 4); ctx.fill();
       ctx.font = "800 10px Barlow, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = p.mood > 0 ? "#e11d48" : "#475569"; ctx.fillText(p.mood > 0 ? "♥" : "?", bx, bY + 3.5); });
+  }
+}
+
+// ---------- Life around the light: stray cats and dogs sit under lamps, moths circle the bulbs, people on park benches and at a café ----------
+let strays = [];
+function updateStrays(dt) {
+  const night = S.phase === "night";
+  if (!night) { strays = []; return; }
+  if (strays.length < 3 && Math.random() < dt * .2) { const e = Math.random() < .5 ? 0 : W, y = 40 + Math.random() * (boundY() - 80); strays.push({x:e, y, tx:e, ty:y, t:0, dog:Math.random() < .35, col:["#2b2b2f", "#c98a4a", "#8a8a90", "#e8e2d6"][Math.random() * 4 | 0], bob:0}); }
+  for (const a of strays) {
+    a.t -= dt;
+    if (a.t <= 0) { const lit = slots.filter(s => isLit(s)); const s = lit[Math.random() * lit.length | 0]; if (s) { a.tx = s.x + rnd(-10, 10); a.ty = s.y + rnd(6, 14); } a.t = rnd(8, 14); }
+    const dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy), st = (a.dog ? 30 : 24) * dt;
+    if (d > 2) { a.x += dx / d * Math.min(d, st); a.y += dy / d * Math.min(d, st); a.f = dx >= 0 ? 1 : -1; a.bob += dt * 12; a.sit = false; } else a.sit = true;
+  }
+}
+function drawStrays() {
+  if (S.phase !== "night") return;
+  const k = Math.max(1, 12 / (14 * pxPerU()));
+  for (const a of strays) uprightAt(ctx, a.x, a.y, () => { ctx.save(); ctx.translate(a.x, a.y); ctx.scale(k * (a.f || 1), k); const b = a.sit ? 0 : Math.abs(Math.sin(a.bob)) * .6;
+    ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(0, .5, 3.4, 1.1, 0, 0, 6.28); ctx.fill(); ctx.fillStyle = a.col;
+    if (a.sit) { ctx.beginPath(); ctx.ellipse(0, -2.4, 2, 2.6, 0, 0, 6.28); ctx.fill(); ctx.beginPath(); ctx.arc(.6, -5.6, 1.5, 0, 6.28); ctx.fill(); ctx.beginPath(); ctx.moveTo(-.4, -6.6); ctx.lineTo(-.1, -8); ctx.lineTo(.5, -6.9); ctx.moveTo(1.1, -6.9); ctx.lineTo(1.7, -8); ctx.lineTo(2, -6.6); ctx.fill(); ctx.strokeStyle = a.col; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(-1.6, -.6); ctx.quadraticCurveTo(-4, -.4, -3.4, -2.6); ctx.stroke(); }   // sitting, tail curled
+    else { ctx.beginPath(); ctx.roundRect(-2.8, -3.6 - b, 5.6, 2.4, 1.1); ctx.fill(); ctx.fillRect(-2.4, -1.4 - b, .9, 1.4 + b); ctx.fillRect(1.6, -1.4 - b, .9, 1.4 + b); ctx.beginPath(); ctx.arc(3.2, -4.2 - b, 1.4, 0, 6.28); ctx.fill();
+      ctx.strokeStyle = a.col; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(-2.6, -3.2 - b); ctx.lineTo(-4.2, a.dog ? -3.6 - b : -5.4 - b); ctx.stroke(); }
+    ctx.restore(); });
+}
+function drawMoths() {   // tiny moths circling lit bulbs, only when zoomed in enough to see them
+  if (S.phase !== "night" || pxPerU() < 1.3) return; const t = performance.now() / 1000; ctx.fillStyle = "rgba(255,250,225,.85)";
+  for (const s of slots) if (isLit(s)) for (let i = 0; i < 3; i++) { const a = t * (2.2 + i * .7) + s.id * 1.7 + i * 2.1, r = 4 + i * 1.6; uprightAt(ctx, s.x, s.y, () => { ctx.beginPath(); ctx.arc(s.x + Math.cos(a) * r, s.y - 3 + Math.sin(a * 1.3) * r * .6, .7, 0, 6.28); ctx.fill(); }); }
+}
+let SEATS = null;   // park benches and café tables, worked out once per map
+function seats() {
+  if (SEATS) return SEATS; SEATS = [];
+  if (!MAP) { const [px, py, pw, ph] = PARK; for (const [fx, fy] of [[.22, .2], [.78, .26], [.2, .8], [.74, .78]]) SEATS.push({x:px + pw * fx, y:py + ph * fy, kind:"bench"}); }
+  else { const pk = PARKS.slice().sort((a, b) => (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0))[0]; if (pk) { let n = 0; for (let i = 0; i < 60 && n < 4; i++) { const x = pk.x0 + (pk.x1 - pk.x0) * ((i * .618) % 1), y = pk.y0 + (pk.y1 - pk.y0) * ((i * .377 + .2) % 1); if (ptIn(x, y, pk.f) && !onRoad(x, y, 10) && x > 10 && x < W - 10 && y > 10 && y < H - 10) { SEATS.push({x, y, kind:"bench"}); n++; } } } }
+  const k = SPOTS.find(o => o.id === "kiosk"); if (k) for (const [dx, dy] of [[-22, 18], [0, 24], [22, 18]]) SEATS.push({x:k.x + dx, y:k.y + dy, kind:"cafe", cen:true});   // a small café garden by the kiosk
+  if (!MAP) { const r = ZONES2.cen.r; for (const [fx, fy] of [[.3, .93], [.5, .95], [.7, .93]]) SEATS.push({x:r[0] + r[2] * fx, y:r[1] + r[3] * fy, kind:"cafe", zone:"cen"}); }
+  return SEATS;
+}
+function drawSeats() {
+  const night = S.phase === "night", k = Math.max(1, 13 / (15 * pxPerU()));
+  for (const st of seats()) {
+    if (st.zone === "cen" && !S.zCen) continue;
+    const lit = !night || litAt(st.x, st.y, LIGHT_K), busy = lit && ((st.x * 7 + st.y * 3) % 5 < (night ? 3 : 2));   // people sit only where it is light
+    uprightAt(ctx, st.x, st.y, () => { ctx.save(); ctx.translate(st.x, st.y); ctx.scale(k, k);
+      ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(0, .5, 6, 1.6, 0, 0, 6.28); ctx.fill();
+      if (st.kind === "bench") { ctx.fillStyle = "#6b4a2e"; ctx.fillRect(-6, -3.2, 12, 1.6); ctx.fillRect(-6, -6.4, 12, 1.4); ctx.fillStyle = "#2c2f36"; ctx.fillRect(-5.5, -1.8, 1, 1.8); ctx.fillRect(4.5, -1.8, 1, 1.8); }
+      else { ctx.fillStyle = "#d8d2c0"; ctx.fillRect(-.5, -9, 1, 9); ctx.fillStyle = (st.x | 0) % 2 ? "#c84a3c" : "#3d7a4a"; ctx.beginPath(); ctx.moveTo(-7, -9); ctx.lineTo(7, -9); ctx.lineTo(0, -12.5); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#e8e4da"; ctx.fillRect(-3.5, -4, 7, 1.2); }   // umbrella and table
+      if (busy) for (const dx of st.kind === "bench" ? [-2.8, 2.6] : [-5, 5]) { const c = PED_COLS[(st.x + dx * 3 | 0) % PED_COLS.length & 7] || "#81b29a"; ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(dx - 1.8, -8.6, 3.6, 5, 1.4); ctx.fill(); ctx.fillStyle = "#2c3344"; ctx.fillRect(dx - 1.6, -3.8, 3.2, 1.4); ctx.fillStyle = "#f1d3b3"; ctx.beginPath(); ctx.arc(dx, -10.2, 1.7, 0, 6.28); ctx.fill(); }
+      ctx.restore(); });
   }
 }
 
@@ -2599,7 +2674,9 @@ function updateThief(t, dt) {
   if (litAt(t.x, t.y, LIGHT_K)) { t.seen += dt; if (t.seen > (S.weather === "fog" ? 1.8 : 1.1)) { catchThief(t); return; } } else t.seen = Math.max(0, t.seen - dt);
   if (t.state === "go") {
     if (t.g.kind === "car" && t.g.ref.gone) { t.state = "flee"; t.exit = edgeFor(t); return; }
-    if (moveTo(t, t.g.x, t.g.y, t.sp, dt)) t.state = "work";
+    if (t.dodge > 0) { t.dodge -= dt; moveTo(t, t.dx, t.dy, t.sp * 1.7, dt); return; }   // caught in a lamp's light: he jumps back into the dark
+    if (t.seen > 0) { const s = slots.filter(isLit).sort((a, b) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y))[0]; if (s) { const d = Math.hypot(t.x - s.x, t.y - s.y) || 1, R = lr(s) * LIGHT_K + 12; t.dx = s.x + (t.x - s.x) / d * R; t.dy = s.y + (t.y - s.y) / d * R; t.dodge = .9; return; } }
+    if (moveTo(t, t.g.x, t.g.y, t.sp * .85, dt)) t.state = "work";   // sneaking
   } else if (t.state === "work") {
     t.work += dt;
     if (t.work >= THIEF.work) {
@@ -2733,8 +2810,10 @@ function drawWeather() {
 function drawGen() { if (!MAP) return drawGen0(); ctx.save(); ctx.translate(GOFF.x, GOFF.y); drawGen0(); ctx.restore(); }
 function drawGen0() {
   const n = S.genLv + 1;
-  for (let i = 0; i < n; i++) { ctx.fillStyle = "#59627a"; ctx.fillRect(11 + i * 9.5, 164, 7, 8); ctx.fillStyle = "#7d879e"; ctx.fillRect(11 + i * 9.5, 164, 7, 2); }
-  if (S.solar) { ctx.fillStyle = "#1f3f78"; ctx.fillRect(6, 100, 46, 10); ctx.strokeStyle = "#7fa6e8"; ctx.lineWidth = 1; for (let x = 6; x <= 52; x += 11.5) { ctx.beginPath(); ctx.moveTo(x, 100); ctx.lineTo(x, 110); ctx.stroke(); } }
+  for (let i = 0; i < n; i++) vBox(14.5 + i * 9.5, 170, 1, 0, -3.5, 3.5, 3.5, 0, 8 * (ISO ? 1.5 : 1), "#6b7590", {});   // one engine block per generator level
+  if (S.solar) { const a = up(2), b = up(8); ctx.fillStyle = "#2b2f36"; ctx.fillRect(8, 108, 1.5, 2); ctx.fillRect(48, 108, 1.5, 2);   // solar panels on a tilted frame, the back edge higher
+    ctx.fillStyle = "#1f3f78"; ctx.beginPath(); ctx.moveTo(6 + a.x, 110 + a.y); ctx.lineTo(52 + a.x, 110 + a.y); ctx.lineTo(52 + b.x, 100 + b.y); ctx.lineTo(6 + b.x, 100 + b.y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#7fa6e8"; ctx.lineWidth = .8; for (let x = 6; x <= 52; x += 11.5) { ctx.beginPath(); ctx.moveTo(x + a.x, 110 + a.y); ctx.lineTo(x + b.x, 100 + b.y); ctx.stroke(); } ctx.beginPath(); ctx.moveTo(6 + (a.x + b.x) / 2, 105 + (a.y + b.y) / 2); ctx.lineTo(52 + (a.x + b.x) / 2, 105 + (a.y + b.y) / 2); ctx.stroke(); }
   for (let i = 0; i < (S.trafo || 0); i++) { const x = 8 + i * 15, y = 197; ctx.fillStyle = "#4d5566"; ctx.fillRect(x, y, 13, 13); ctx.fillStyle = "#f1c453"; ctx.beginPath(); ctx.moveTo(x + 7.5, y + 2); ctx.lineTo(x + 3.5, y + 7.5); ctx.lineTo(x + 6.5, y + 7.5); ctx.lineTo(x + 5.5, y + 11.5); ctx.lineTo(x + 9.5, y + 6); ctx.lineTo(x + 6.5, y + 6); ctx.closePath(); ctx.fill(); }
   if (S.ups) { const k = S.upsCharge / UPS_SEC; ctx.fillStyle = "#222"; ctx.fillRect(40, 122, 9, 15); ctx.fillStyle = k > .3 ? "#7ed39a" : "#ff6b5b"; ctx.fillRect(41, 136 - 13 * k, 7, 13 * k); }
   const L = S.load, t = performance.now();
@@ -2834,7 +2913,7 @@ function render() {
   const glow = (x, y, r, c, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${c},${.32 * a})`); g.addColorStop(.35, `rgba(${c},${.12 * a})`); g.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill(); };
   for (const s of lit) glow(s.x, s.y, lr(s), lampCol(s), s.lamp.fa);
   if (S.phase === "night") for (const r of refls) glow(r.x, r.y, REF.r, REF.col, .9);
-  for (const c of traffic) if (S.phase === "night") { const a = c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), px = -Math.sin(a) * 4, py = Math.cos(a) * 4, d = c.dark ? 30 : 22, r = c.dark ? 34 : 22, k = c.dark ? .85 : .45;
+  for (const c of traffic) if (S.phase === "night") { const a = c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), px = -Math.sin(a) * 4, py = Math.cos(a) * 4, d = c.dark ? 36 : 18, r = c.dark ? 44 : 16, k = c.dark ? .95 : .35;   // high beams in the dark, dipped in a lit street
     glow(c.x + Math.cos(a) * d + px, c.y + Math.sin(a) * d + py, r, [255,236,180], k); glow(c.x + Math.cos(a) * d - px, c.y + Math.sin(a) * d - py, r, [255,236,180], k);
     if (c.type === "police") glow(c.x, c.y, 30, (performance.now() / 220 | 0) % 2 ? [90,140,255] : [255,80,80], .7); }
   if (S.patrol) glow(S.patrol.x, S.patrol.y, PATROL.r, (performance.now() / 300 | 0) % 2 ? [90,140,255] : [255,80,80], .9);
@@ -2854,7 +2933,7 @@ function render() {
     const z = BZ(h), o = up(z), Y1 = h.y + h.h, X1 = h.x + h.w;
     const wq = (pts) => { ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); };
     [[.25, .28], [.68, .28], [.25, .68], [.68, .68]].forEach((p, i) => {
-      if (!h.win[i]) return;
+      if (!h.win[i] && !(h.glow > .05 && i < 1 + h.sat * 3.2)) return;   // a lit street switches on more windows: the happier the house, the more
       ctx.fillStyle = h.glow > .05 ? `rgba(255,205,110,${.25 + .7 * h.glow})` : S.phase === "day" ? "rgba(150,180,210,.5)" : "rgba(40,50,80,.5)";
       ctx.fillRect(h.x + h.w * p[0] - 2.5 + o.x, h.y + h.h * p[1] - 3 + o.y, 5, 6);
       if (h.glow > .05 && !h.poly && !h.fac) {   // the same light in the walls
@@ -2897,7 +2976,7 @@ function render() {
     const b = Math.sin(t.bob) * 1.1;
     ctx.fillStyle = "#ffd84a"; ctx.shadowColor = "#ffd84a"; ctx.shadowBlur = 6; ctx.fillRect(t.x - 2.5, t.y - 4 + b, 2, 2); ctx.fillRect(t.x + .5, t.y - 4 + b, 2, 2); ctx.shadowBlur = 0;
   }
-  drawPeds();
+  drawSeats(); drawPeds(); drawStrays(); drawMoths();
   drawTraffic();
   for (const v of vans) drawVan(v);
   if (S.patrol) {
