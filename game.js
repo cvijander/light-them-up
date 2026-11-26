@@ -146,7 +146,7 @@ const STAR_PERK = [Tx("Osnovni nivo"), Tx("Stanari plaćaju 5% više"), Tx("Tend
 const TARIFF = 1.4;   // expensive power night: +40%
 const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10 + Object.keys(S.mgr || {}).length * MGR_WAGE;   // paid every dawn
 
-const DEFAULTS = () => ({mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
+const DEFAULTS = () => ({req:null, reqAt:-1, mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
   order:0, scared:0, broken:0, flashCd:0, spawnT:10, used:0, inc:0, cover:0, coverT:0, goal:0, banner:null,
   night:1, phase:"night", phaseT:SEASON().night, nLen:SEASON().night, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
@@ -555,7 +555,7 @@ let NOSAVE = false;   // set when this town was just parked, so a reload cannot 
 function save() {
   if (!S.started || NOSAVE) return;
   try {
-    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv","nLen"];
+    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv","nLen","req","reqAt"];
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
@@ -2016,7 +2016,7 @@ function step(dt) {
   S.dark += ((S.phase === "night" ? .78 : .12) - S.dark) * Math.min(1, dt * .9);
   if (S.phaseT <= 0 && dt > 0) {
     if (S.phase === "night") {
-      S.phase = "day"; S.phaseT = SEASON().day; recSet(r => { r.nights++; r.rep = Math.max(r.rep, Math.round(S.rep)); r.cover = Math.max(r.cover, Math.floor(S.cover * 100)); });
+      S.phase = "day"; S.phaseT = SEASON().day; reqDawn(); recSet(r => { r.nights++; r.rep = Math.max(r.rep, Math.round(S.rep)); r.cover = Math.max(r.cover, Math.floor(S.cover * 100)); });
       S.dayRate = S.nightN ? .5 * S.nightVal / S.nightN * (S.nLen || NIGHT_LEN) / S.phaseT : 0; S.nightVal = 0; S.nightN = 0;
       if (S.mission && !S.mission.done && !S.mission.fail) { if (["house", "nobreak", "load"].includes(S.mission.type)) misWin(); else misFail(Tx("Nisi stigao do cilja.")); }
       const repD = repStep(S.cover);
@@ -2048,12 +2048,12 @@ function step(dt) {
       refls = []; S.patrol = null; S.calm = 0;
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
       S.dawn = {night:S.night, net, day:Math.round(S.dayRate * SEASON().day), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
-        notes:[misLine, bigLine, evLine, S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
+        notes:[misLine, bigLine, evLine, S.reqLine || "", S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
       dailyInc("night"); { const dd = dailyGet(), nd = dd.tasks.filter(t => t.done).length; if (nd < dd.tasks.length) S.dawn.notes.push(Tx`Dnevni zadaci: gotovo ${nd} od ${dd.tasks.length}.`); }
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
     } else {
-      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.nLen = S.phaseT = SEASON().night; S.night++; S.spawnT = 8; S.thiefT = rnd(12, 25);
+      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.nLen = S.phaseT = SEASON().night; S.night++; S.req = null; S.reqAt = S.night >= 2 && Math.random() < .6 ? S.nLen * rnd(.78, .92) : -1; S.spawnT = 8; S.thiefT = rnd(12, 25);
       S.outAt = S.night >= 3 && Math.random() < .3 + (1 - S.genHp) * .7 ? rnd(15, S.nLen - 15) : -1;
       S.boAt = BL && S.night >= 2 && Math.random() < Math.min(.6, .2 + .08 * BL) ? rnd(20, S.nLen - 30) : -1;
       const G = S.gang;
@@ -3171,7 +3171,7 @@ function render() {
     const tones = [MAP ? DIST0 : "novi", S.unlocked && !MAP ? "stari" : null].filter(Boolean).map(d => districtTone(d)).filter(t => t.tones.size);
     for (const t of tones) { const ok = !!t.tone, tx = ok ? "+25%" : "0%"; chips.push({w:ctx.measureText(tx).width + 26, draw:(x, y) => { ctx.fillStyle = ok ? "#7ed39a" : "#f1c453"; ctx.beginPath(); ctx.arc(x + 10, y + 10, 3.5, 0, 6.28); ctx.fill(); ctx.fillText(tx, x + 18, y + 15); }}); }   // same light colour bonus
     if (S.goal !== 0 && S.goal !== 2) { const t = gl; chips.push({w:ctx.measureText(t).width + 14, draw:(x, y) => { ctx.fillStyle = "#f1c453"; ctx.fillText(t, x + 7, y + 15); }}); }
-    const alert = [wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : "", hl].find(Boolean);
+    const alert = [reqLabel(), wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : "", hl].find(Boolean);
     if (alert) chips.push({w:ctx.measureText(alert).width + 14, draw:(x, y) => { ctx.fillStyle = "#c9cfdb"; ctx.fillText(alert, x + 7, y + 15); }});
     let x = 6, y = 6;
     for (const c of chips) { if (x + c.w > UW - 6 && x > 6) { x = 6; y += 24; } ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(x, y, c.w, 20, 10); ctx.fill(); c.draw(x, y); x += c.w + 5; }
@@ -3182,7 +3182,7 @@ function render() {
   ly = 8 + left.length * 26;
   ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly, 160, 8); ctx.fillStyle = S.cover > .95 ? "#7ed39a" : "#f1c453"; ctx.fillRect(9, ly + 1, 158 * S.cover, 6);
   ctx.textAlign = "right";
-  const rl = [gl, hl, wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : ""].filter(Boolean);
+  const rl = [gl, reqLabel(), hl, wl, wl0, S.heat ? Tx("Toplotna mapa: crveno = nezadovoljni") : ""].filter(Boolean);
   const lw = left.map(([t, c, f]) => ctx.measureText(t).width + 16 + (f ? 16 : 0));   // on a narrow screen the right badges go under the left ones instead of over them
   const ro = rl.some((t, i) => ctx.measureText(t).width + 16 + (i < lw.length ? lw[i] : i === lw.length ? 160 : 0) + 24 > UW) ? ly + 14 - 8 : 0;
   S.hudB = Math.max(ly + 14, rl.length ? ro + 8 + rl.length * 26 : 0) * UK;   // where the top badges end (map width units), the banner goes under them
@@ -3193,6 +3193,7 @@ function render() {
   if (S.flashCd > 0) { ctx.fillStyle = "rgba(8,10,20,.8)"; ctx.fillRect(8, ly + 14, 130, 20); ctx.fillStyle = "#8f98ae"; ctx.font = "500 12px Barlow, sans-serif"; ctx.fillText(Tx("Baterija se puni…"), 16, ly + 28); }
   ctx = ctx0; VT(ctx);
   ctx.globalAlpha = 1;
+  drawReq();
   if (S.mission && S.mission.type === "house" && S.phase === "night") { const h = houses[S.mission.house];
     if (h) { const ok = !S.mission.fail, pu = .6 + .4 * Math.sin(performance.now() / 250);
       ctx.strokeStyle = ok ? `rgba(126,211,154,${pu})` : "rgba(255,107,91,.8)"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); { const o = up(BZ(h)); ctx.strokeRect(h.x - 4 + o.x, h.y - 4 + o.y, h.w + 8, h.h + 8); } ctx.setLineDash([]);
@@ -3437,6 +3438,46 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
 }
 // ---------- Loop ----------
 
+// ---------- Neighbours ask for light: "light the spot in front of my house by 23h", a reward when it is done ----------
+const REQ_WHO = [[Tx("Komšinica"), "Mira"], [Tx("Čika"), "Žika"], [Tx("Baba"), "Ljilja"], [Tx("Komšija"), "Dragan"], [Tx("Teta"), "Vesna"], [Tx("Deda"), "Steva"]];
+const REQ_WHERE = {house:Tx("ispred moje kuće"), kiosk:Tx("kod trafike"), bus:Tx("na stajalištu")};
+const reqWho = R => REQ_WHO[R.who][0] + " " + REQ_WHO[R.who][1];
+const reqHH = R => String(R.H % 24).padStart(2, "0") + ":00";
+const reqLit = R => R.hid != null ? !!(houses[R.hid] && houses[R.hid].lit) : litAt(R.x, R.y, LIGHT_K);
+const reqText = R => R.all ? Tx`${reqWho(R)}: „Upali svetlo ${REQ_WHERE[R.w]} do ${reqHH(R)} i neka svetli do zore." Nagrada ${R.r} $.` : Tx`${reqWho(R)}: „Upali svetlo ${REQ_WHERE[R.w]} do ${reqHH(R)}." Nagrada ${R.r} $.`;
+function reqNew() {
+  const C = [];
+  for (const h of houses) if (hOn(h) && h.cy < boundY() && !h.lit && !h.fac) C.push({x:h.cx, y:h.cy, w:"house", hid:h.id});
+  if (!MAP) for (const sp of SPOTS) if (!litAt(sp.x, sp.y, LIGHT_K)) C.push({x:sp.x, y:sp.y, w:sp.id});
+  if (!C.length) return null;
+  const c = C[Math.random() * C.length | 0], H = [23, 24, 25][Math.random() * 3 | 0], all = Math.random() < .35;
+  return {x:c.x, y:c.y, w:c.w, hid:c.hid, who:Math.random() * REQ_WHO.length | 0, H, all, r:Math.round((20 + Math.min(40, 3 * S.night)) * (all ? 1.6 : 1)), at:S.nLen * (1 - (H - 20) / 10), ok:false, dark:0, done:false};
+}
+function reqWin(R) { R.done = true; R.win = true; S.money += R.r; S.led.bounty += R.r; S.rep = Math.min(100, S.rep + 2); SFX.coin(); float(R.x, R.y - 30, Tx`Hvala! +${R.r} $`, "#7ed39a", true); msg(Tx`${reqWho(R)} kaže hvala! Nagrada +${R.r} $, ugled +2.`); recInc("reqs"); }
+function reqFail(R, why) { R.done = true; S.rep = Math.max(0, S.rep - 1); SFX.err(); float(R.x, R.y - 30, Tx("Ostalo je mračno"), "#ff6b5b"); msg(why || Tx`${reqWho(R)} i dalje sedi u mraku. Ugled −1.`, true); }
+function reqTick(dt) {
+  if (!S.started || tut || S.phase !== "night" || dt <= 0) return;
+  const R = S.req;
+  if (!R) { if (S.reqAt > 0 && S.phaseT < S.reqAt) { S.reqAt = -1; const n = reqNew(); if (n) { S.req = n; banner(Tx("Komšija moli za svetlo"), reqText(n)); SFX.click(); } } return; }
+  if (R.done) return;
+  const lit = reqLit(R);
+  if (!R.ok) { if (lit) { R.ok = true; if (!R.all) reqWin(R); else float(R.x, R.y - 30, Tx("Svetli! Neka gori do zore."), "#7ed39a"); } else if (S.phaseT < R.at) reqFail(R); }
+  else if (R.all && !lit) { R.dark += dt; if (R.dark > 4) reqFail(R, Tx`Lampa kod komšije (${reqWho(R)}) se ugasila pre zore. Ugled −1.`); }
+}
+function reqDawn() {   // the "until dawn" requests are paid at dawn
+  const R = S.req; S.reqLine = ""; S.req = null; S.reqAt = -1; if (!R) return;
+  if (!R.done && R.ok && R.all) reqWin(R);
+  S.reqLine = R.win ? Tx`Komšija zadovoljan: +${R.r} $.` : R.done || !R.ok ? Tx("Zahtev komšije nije ispunjen.") : "";
+}
+const reqLabel = () => { const R = S.req; if (!R || R.done || S.phase !== "night") return ""; return R.ok ? Tx`${reqWho(R)}: drži svetlo do zore` : Tx`${reqWho(R)}: svetlo do ${reqHH(R)} (${fmtT(Math.max(0, S.phaseT - R.at))})`; };
+function drawReq() {
+  const R = S.req; if (!R || R.done || S.phase !== "night") return;
+  const pu = .55 + .45 * Math.sin(performance.now() / 220), col = R.ok ? "126,211,154" : "255,176,46";
+  ctx.save(); ctx.strokeStyle = `rgba(${col},${pu})`; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.arc(R.x, R.y, 24 + 6 * pu, 0, 6.29); ctx.stroke(); ctx.setLineDash([]);
+  const t = R.ok ? Tx("do zore") : reqHH(R); ctx.font = "700 12px Barlow, sans-serif"; ctx.textAlign = "center"; const w = ctx.measureText(t).width + 30;
+  uprightAt(ctx, R.x, R.y, () => { ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.beginPath(); ctx.roundRect(R.x - w / 2, R.y - 52, w, 20, 10); ctx.fill(); ctx.fillStyle = `rgb(${col})`; ctx.fillText("🏠 " + t, R.x, R.y - 37.5); });
+  ctx.restore();
+}
 // ---------- First-minute tutorial: only once, only for a new game ----------
 const TUT_KEY = "lightThemUp.tutDone3";   // new guided tutorial: shown once more to everyone
 const tutCount = () => slots.filter(s => s.lamp).length + jobs.filter(j => j.type === "install").length;
@@ -3530,7 +3571,7 @@ function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
-  tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) mgrTick(dt);
+  tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) { mgrTick(dt); reqTick(dt); }
   ambT -= dt; if (ambT <= 0) { AMB.update(.2 - ambT); ambT = .2; }
   autoT -= dt; if (autoT <= 0) { autoT = 15; if (S.started && !hold) save(); }   // autosave every 15 s of play
   render();
