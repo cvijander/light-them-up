@@ -111,6 +111,17 @@ const FUEL_PER_POWER = 0.012;   // $ per second per power unit at night
 const LIGHT_K = 0.9;
 const LAMP_HP = 5;
 const NIGHT_LEN = 75, DAY_LEN = 35;
+// seasons follow the real calendar (south of the equator they are turned around): winter has long nights, summer short ones, and each season has its own weather
+const SEASONS = {
+  winter:{id:"winter", name:Tx("Zima"), ico:"❄", night:95, day:30, wx:{snow:.3, fog:.2}},
+  spring:{id:"spring", name:Tx("Proleće"), ico:"🌱", night:75, day:35, wx:{rain:.3, fog:.1, storm:.08}},
+  summer:{id:"summer", name:Tx("Leto"), ico:"☀", night:60, day:42, wx:{storm:.15, rain:.1}},
+  autumn:{id:"autumn", name:Tx("Jesen"), ico:"🍂", night:85, day:32, wx:{rain:.3, fog:.25, storm:.05}},
+};
+const SEASON = () => { const lat = MAP && MAP.part === "my" && CITYD ? +CITYD.lat : 44.9; let m = new Date().getMonth(); if (lat < -5) m = (m + 6) % 12; return SEASONS[m === 11 || m < 2 ? "winter" : m < 5 ? "spring" : m < 8 ? "summer" : "autumn"]; };
+const WX_K = {fog:.75, rain:.88, snow:.85};   // how far the light reaches in that weather
+const wxK = () => S.phase === "night" && WX_K[S.weather] || 1;
+const WX_LABEL = () => ({fog:Tx("Magla: domet −25%"), storm:Tx("Oluja: pazi na stare lampe"), rain:Tx("Kiša: domet −12%"), snow:Tx("Sneg: domet −15%, kombiji sporiji")})[S.weather] || "";
 const SAT_UP = 1 / 60, SAT_DOWN = 1 / 12;   // satisfaction per second lit / dark at night
 const SAVE_KEY = MAP ? "lightThemUp.borca.q" + MAP.id : "lightThemUp.save.v2";
 const SENSOR_COST = 30, GLASS_COST = 25, SENSOR_DIM = .35, FOG_K = .75;
@@ -137,7 +148,7 @@ const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10 + Object.keys(S.mgr
 
 const DEFAULTS = () => ({mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
   order:0, scared:0, broken:0, flashCd:0, spawnT:10, used:0, inc:0, cover:0, coverT:0, goal:0, banner:null,
-  night:1, phase:"night", phaseT:NIGHT_LEN, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
+  night:1, phase:"night", phaseT:SEASON().night, nLen:SEASON().night, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
 let thieves = [], traffic = [], peds = [];
 const CARS = [{x:119, y:228, v:1, col:"#8a2f2f"}, {x:291, y:625, v:1, col:"#2f5a8a"}, {x:539, y:262, v:1, col:"#c9c9c9"}, {x:200, y:109, v:0, col:"#3d7a4a"}, {x:455, y:321, v:0, col:"#b88a2f"}, {x:240, y:609, v:0, col:"#5a3d7a"}];   // parked at the kerb, half on the sidewalk, clear of the traffic lanes
@@ -544,7 +555,7 @@ let NOSAVE = false;   // set when this town was just parked, so a reload cannot 
 function save() {
   if (!S.started || NOSAVE) return;
   try {
-    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv"];
+    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv","nLen"];
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
@@ -777,7 +788,7 @@ const isOn = s => s && s.lamp && s.lamp.state === "ok" && s.lamp.powered && avai
 const isLit = s => isOn(s) && S.phase === "night";
 // on = true: lamps that would shine (coverage). on = false: what actually shines now, reflectors included (scares hooligans)
 const sensorIdle = L => L.sensor && !(L.wake > 0) && S.phase === "night";
-const lr = s => s.lamp.m.r * (S.weather === "fog" && S.phase === "night" ? FOG_K : 1) * (sensorIdle(s.lamp) ? SENSOR_DIM : 1);
+const lr = s => s.lamp.m.r * wxK() * (sensorIdle(s.lamp) ? SENSOR_DIM : 1);
 function litAt(x, y, k, on) {
   const f = on ? isOn : isLit;
   for (const s of slots) if (f(s) && Math.hypot(s.x - x, s.y - y) < lr(s) * k) return true;
@@ -1796,6 +1807,45 @@ const MUSIC = (() => {
   function stop() { if (timer) { clearInterval(timer); timer = null; } try { if (ac && ac.state === "running") ac.suspend(); } catch (e) {} }
   return {start, stop, get on() { return on; }, set on(v) { on = v; try { localStorage.setItem("lightThemUp.music", v ? "on" : "off"); } catch (e) {} if (v) start(); else stop(); }};
 })();
+// ---------- Ambient sound: night crickets, the hum of the lamps, van engines, rain and thunder, birds by day (no files, all made here) ----------
+const AMB = (() => {
+  let ac = null, out = null, hum = null, eng = null, rain = null, wind = null, chirpT = 2, birdT = 4, lastL = 0;
+  const g = (v) => { const n = ac.createGain(); n.gain.value = v; return n; };
+  function init() {
+    if (ac) return true;
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)(); out = g(1); out.connect(ac.destination);
+      const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const noise = (type, f, q) => { const s = ac.createBufferSource(); s.buffer = nb; s.loop = true; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const gg = g(0); s.connect(fl); fl.connect(gg); gg.connect(out); s.start(); return gg; };
+      rain = noise("bandpass", 2400, .6); wind = noise("lowpass", 380, .7);
+      { const o = ac.createOscillator(), o2 = ac.createOscillator(), fl = ac.createBiquadFilter(); o.type = "sawtooth"; o.frequency.value = 100; o2.type = "sine"; o2.frequency.value = 200; fl.type = "lowpass"; fl.frequency.value = 420; hum = g(0); o.connect(fl); o2.connect(fl); fl.connect(hum); hum.connect(out); o.start(); o2.start(); }   // mains hum of the lamps
+      { const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = g(6), fl = ac.createBiquadFilter(); o.type = "sawtooth"; o.frequency.value = 52; lfo.frequency.value = 7; lfo.connect(lg); lg.connect(o.frequency); fl.type = "lowpass"; fl.frequency.value = 260; eng = g(0); o.connect(fl); fl.connect(eng); eng.connect(out); o.start(); lfo.start(); }   // van engine
+      return true;
+    } catch (e) { ac = null; return false; }
+  }
+  const to = (n, v) => { try { n.gain.setTargetAtTime(v, ac.currentTime, .4); } catch (e) {} };
+  function blip(f, f2, dur, vol, type = "sine", at = 0) { const t = ac.currentTime + at, o = ac.createOscillator(), gg = g(0); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(vol, t + dur * .2); gg.gain.exponentialRampToValueAtTime(.0005, t + dur); o.connect(gg); gg.connect(out); o.start(t); o.stop(t + dur + .02); }
+  function thunder() { const t = ac.currentTime, s = ac.createBufferSource(), fl = ac.createBiquadFilter(), gg = g(0); s.buffer = ac.createBuffer(1, ac.sampleRate * 3, ac.sampleRate); const d = s.buffer.getChannelData(0); let v = 0; for (let i = 0; i < d.length; i++) { v = v * .98 + (Math.random() * 2 - 1) * .2; d[i] = v; } fl.type = "lowpass"; fl.frequency.value = 160; gg.gain.setValueAtTime(.0001, t); gg.gain.exponentialRampToValueAtTime(.5, t + .08); gg.gain.exponentialRampToValueAtTime(.001, t + 2.8); s.connect(fl); fl.connect(gg); gg.connect(out); s.start(t); }
+  let on = false;
+  function update(dt) {
+    const want = S.started && !S.paused && !SFX.muted && !document.hidden;
+    if (!want) { if (on && ac) { try { ac.suspend(); } catch (e) {} } on = false; return; }
+    if (!ac) return;   // created on the first touch, browsers do not allow sound before that
+    if (!on) { try { ac.resume(); } catch (e) {} on = true; }
+    const night = S.phase === "night", wx = night ? S.weather : "";
+    const lit = slots.filter(s => isLit(s)).length, moving = vans.filter(v => v.state === "drive" || v.state === "return").length;
+    to(hum, night ? Math.min(.012, .0018 * Math.sqrt(lit)) : 0);
+    to(eng, Math.min(2, moving) * .022);
+    to(rain, wx === "storm" ? .07 : wx === "rain" ? .045 : wx === "snow" ? .006 : 0);
+    to(wind, wx === "snow" || wx === "storm" ? .05 : wx === "fog" ? .02 : night ? .012 : .008);
+    if (S.lightning > lastL + .3) thunder(); lastL = S.lightning;
+    if (night && wx !== "storm" && wx !== "rain" && wx !== "snow" && SEASON().id !== "winter") { chirpT -= dt; if (chirpT <= 0) { chirpT = .6 + Math.random() * 2.4; const f = 4200 + Math.random() * 900, n = 2 + (Math.random() * 3 | 0); for (let k = 0; k < n; k++) blip(f, 0, .05, .006, "sine", k * .09); } }   // crickets
+    if (!night && wx === "") { birdT -= dt; if (birdT <= 0) { birdT = 2 + Math.random() * 5; const f = 2400 + Math.random() * 1600; blip(f, f * 1.4, .12, .01); blip(f * 1.3, f * .9, .14, .008, "sine", .16); } }   // birds by day
+  }
+  const kick = () => { if (!SFX.muted && init() && ac.state === "suspended" && S.started && !S.paused) try { ac.resume(); } catch (e) {} };
+  addEventListener("pointerdown", kick, {passive:true}); addEventListener("keydown", kick);
+  return {update};
+})();
 function setSoundBtn() { const b = $("btnSound"); b.innerHTML = SFX.muted ? SVG_SND_OFF : SVG_SND_ON; b.setAttribute("aria-pressed", String(!SFX.muted)); b.title = SFX.muted ? Tx("Zvuk je isključen") : !MUSIC.on ? Tx("Samo zvukovi, bez muzike") : Tx("Zvuk i muzika"); }
 setSoundBtn(); $("btnSound").onclick = () => {   // three steps: sound and music, sound only, silence
   if (!SFX.muted && MUSIC.on) { MUSIC.on = false; msg(Tx("Muzika je isključena, zvukovi rade.")); }
@@ -1966,8 +2016,8 @@ function step(dt) {
   S.dark += ((S.phase === "night" ? .78 : .12) - S.dark) * Math.min(1, dt * .9);
   if (S.phaseT <= 0 && dt > 0) {
     if (S.phase === "night") {
-      S.phase = "day"; S.phaseT = DAY_LEN; recSet(r => { r.nights++; r.rep = Math.max(r.rep, Math.round(S.rep)); r.cover = Math.max(r.cover, Math.floor(S.cover * 100)); });
-      S.dayRate = S.nightN ? .5 * S.nightVal / S.nightN * NIGHT_LEN / DAY_LEN : 0; S.nightVal = 0; S.nightN = 0;
+      S.phase = "day"; S.phaseT = SEASON().day; recSet(r => { r.nights++; r.rep = Math.max(r.rep, Math.round(S.rep)); r.cover = Math.max(r.cover, Math.floor(S.cover * 100)); });
+      S.dayRate = S.nightN ? .5 * S.nightVal / S.nightN * (S.nLen || NIGHT_LEN) / S.phaseT : 0; S.nightVal = 0; S.nightN = 0;
       if (S.mission && !S.mission.done && !S.mission.fail) { if (["house", "nobreak", "load"].includes(S.mission.type)) misWin(); else misFail(Tx("Nisi stigao do cilja.")); }
       const repD = repStep(S.cover);
       if (S.tender && (S.tender.type === "cover" && S.cover >= .9 || S.tender.type === "safe" && !S.tenderTheft)) S.tender.prog++;
@@ -1997,15 +2047,15 @@ function step(dt) {
       { const G = S.gang; G.rage = Math.max(0, G.rage - 15); const before = zones.length; zones = zones.filter(z => z.perm || z.until > S.night); if (zones.length < before && !G.gone) S.reopened = before - zones.length; }
       refls = []; S.patrol = null; S.calm = 0;
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
-      S.dawn = {night:S.night, net, day:Math.round(S.dayRate * DAY_LEN), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
+      S.dawn = {night:S.night, net, day:Math.round(S.dayRate * SEASON().day), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
         notes:[misLine, bigLine, evLine, S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
       dailyInc("night"); { const dd = dailyGet(), nd = dd.tasks.filter(t => t.done).length; if (nd < dd.tasks.length) S.dawn.notes.push(Tx`Dnevni zadaci: gotovo ${nd} od ${dd.tasks.length}.`); }
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
     } else {
-      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.phaseT = NIGHT_LEN; S.night++; S.spawnT = 8; S.thiefT = rnd(12, 25);
-      S.outAt = S.night >= 3 && Math.random() < .3 + (1 - S.genHp) * .7 ? rnd(15, NIGHT_LEN - 15) : -1;
-      S.boAt = BL && S.night >= 2 && Math.random() < Math.min(.6, .2 + .08 * BL) ? rnd(20, NIGHT_LEN - 30) : -1;
+      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.nLen = S.phaseT = SEASON().night; S.night++; S.spawnT = 8; S.thiefT = rnd(12, 25);
+      S.outAt = S.night >= 3 && Math.random() < .3 + (1 - S.genHp) * .7 ? rnd(15, S.nLen - 15) : -1;
+      S.boAt = BL && S.night >= 2 && Math.random() < Math.min(.6, .2 + .08 * BL) ? rnd(20, S.nLen - 30) : -1;
       const G = S.gang;
       if (G.gone && G.back && S.night >= G.back) {
         G.lv++; Object.assign(G, {presence:60 + 10 * G.lv, rage:0, gone:false, back:0}); zones = [];
@@ -2014,8 +2064,9 @@ function step(dt) {
       S.reopened = 0;
       S.tariff = S.night >= 2 && Math.random() < .25 ? TARIFF : 1;
       if (S.tariff > 1) S.banner.sub += " " + Tx("Skupa struja +40%") + ".";
-      S.weather = S.night >= 3 ? (Math.random() < .2 ? "fog" : Math.random() < .2 ? "storm" : "") : ""; S.stormT = rnd(6, 10);
-      if (S.weather) { S.banner.sub += " " + (S.weather === "fog" ? Tx("Magla: domet −25%") : Tx("Oluja: pazi na stare lampe")) + "."; if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } }
+      { const se = SEASON(); S.weather = ""; if (S.night >= 2) { let r = Math.random(); for (const k in se.wx) { if ((k === "storm" || k === "fog") && S.night < 3) continue; if (r < se.wx[k]) { S.weather = k; break; } r -= se.wx[k]; } } S.stormT = rnd(6, 10);
+        if (S.night === 1 || !S.tips["season_" + se.id]) { S.tips["season_" + se.id] = 1; S.banner.sub += " " + Tx`${se.ico} ${se.name}: noć traje ${se.night} s, dan ${se.day} s.`; }
+        if (S.weather) { S.banner.sub += " " + WX_LABEL() + "."; if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } } }
       S.mission = newMission(); if (S.mission) { S.banner.sub += " " + misText(S.mission); S.msgT = 0; }
       S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0; evStart();
       if (S.big) {
@@ -2066,7 +2117,7 @@ function step(dt) {
     S.inc = pay - fuel;
   } else { S.inc = S.dayRate; S.money += S.dayRate * dt; S.led.pay += S.dayRate * dt; }
   // jobs & vans
-  const spd = 92 * SPEED_MULT[S.speedLv] * (S.phase === "day" ? 1.2 : 1);   // a bit faster than traffic, not flying past it
+  const spd = 92 * SPEED_MULT[S.speedLv] * (S.phase === "day" ? 1.2 : 1) * (S.phase === "night" && S.weather === "snow" ? .8 : 1);   // a bit faster than traffic, not flying past it
   for (const v of vans) {
     if (!v.job) {
       const free = jobs.filter(j => !j.assigned);
@@ -2403,7 +2454,7 @@ function updateSensors(dt) {
     const L = s.lamp; if (!L || !L.sensor || !avail(s)) continue;
     if (L.wake > 0) L.wake -= dt; if (L.cd > 0) L.cd -= dt;
     if (!night || L.state !== "ok") continue;
-    const R = L.m.r * LIGHT_K * (S.weather === "fog" ? FOG_K : 1), near = o => Math.hypot(o.x - s.x, o.y - s.y) < R;
+    const R = L.m.r * LIGHT_K * wxK(), near = o => Math.hypot(o.x - s.x, o.y - s.y) < R;
     const hood = hoods.find(h => h.state !== "flee" && near(h)), thief = thieves.find(near);
     if (hood || thief || peds.some(near) || traffic.some(near)) { if (!(L.wake > 0) && (hood || thief)) burst(s.x, s.y, "#fff3c4", 6, 40); L.wake = 3; }
     if (hood && L.powered && !(L.cd > 0) && scare(hood)) { L.cd = 2; S.money += 3; S.led.bounty += 3; SFX.coin(); float(hood.x, hood.y - 14, Tx("Senzor! +3 $"), "#7ed39a", true); }
@@ -2848,8 +2899,11 @@ function drawWeather() {
       const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r); g.addColorStop(0, "rgba(170,180,200,.22)"); g.addColorStop(1, "rgba(170,180,200,0)");
       ctx.fillStyle = g; ctx.fillRect(f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
     }
+  } else if (S.weather === "snow") {
+    ctx.fillStyle = "rgba(240,246,255,.75)";
+    for (const d of RAIN) { d.y += d.v * .09 * dt; d.x += Math.sin(now / 700 + d.v) * 14 * dt; if (d.y > by) { d.y = -6; d.x = Math.random() * (W + 40) - 20; } ctx.beginPath(); ctx.arc(d.x, d.y, 2 + (d.v % 3) * .7, 0, 6.3); ctx.fill(); }
   } else {
-    ctx.strokeStyle = "rgba(170,200,255,.35)"; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.strokeStyle = S.weather === "rain" ? "rgba(170,200,255,.25)" : "rgba(170,200,255,.35)"; ctx.lineWidth = 1; ctx.beginPath();
     for (const d of RAIN) { d.y += d.v * dt; d.x -= d.v * .2 * dt; if (d.y > by) { d.y = -10; d.x = Math.random() * (W + 100); } ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 3, d.y + 12); }
     ctx.stroke();
     if (S.lightning > 0) { ctx.fillStyle = `rgba(220,230,255,${S.lightning * 1.2})`; ctx.fillRect(0, 0, W, by); }
@@ -3107,7 +3161,7 @@ function render() {
   const sp = Math.round(S.sat * 100);
   const gl = MAP && S.goal >= 1 ? (S.auto ? Tx("Kvart radi sam") : Tx("Cilj: automatizuj kvart")) : S.goal === 0 ? Tx`Cilj: osvetli ceo kvart (${Math.floor(S.cover * 100)}%)` : S.goal === 1 ? Tx("Cilj: kupi stari kvart") : S.goal === 2 ? Tx`Cilj: osvetli i stari kvart (${Math.floor(S.cover * 100)}%)` : Tx("Svi ciljevi ispunjeni");
   const wl0 = S.phase === "night" && S.tariff > 1 ? Tx("Skupa struja +40%") : "";
-  const wl = evLabel() || (S.phase === "night" && S.weather === "fog" ? Tx("Magla: domet −25%") : S.phase === "night" && S.weather === "storm" ? Tx("Oluja: pazi na stare lampe") : "");
+  const wl = evLabel() || (S.phase === "night" ? WX_LABEL() : "");
   const hl = S.phase === "day" ? Tx("Dan: popravke −50%") : S.patrol ? Tx("Patrola obilazi kvart…") : S.calm > 0 ? Tx`Mirno još ${fmtT(S.calm)}` : S.night < GANG_N ? Tx("Huligani dolaze od 2. noći") : BL && S.night === 1 && S.phase === "night" ? (MAP && MAP.part === "my" ? Tx`Težina ${BL + 1}: banda te već zna` : Tx`Težina Borče ${BL + 1}: banda te već zna`) : "";
   let ly;
   if (compact) {
@@ -3471,12 +3525,13 @@ $("tutNext").onclick = tutNext; $("tutSkip").onclick = tutEnd;
 $("btnTut").onclick = () => { $("btnTut").hidden = true; $("btnStart").click(); setTimeout(() => tutStart(true), 300); };
 const CHIP_HELP = {hMoney:Tx("Novac: od njega kupuješ lampe, popravke i stvari u Prodavnici."), hInc:Tx("Prihod: koliko zarađuješ u sekundi. Stanari plaćaju noću, dok im lampe svetle."), hCover:Tx("Svetlo: koliki deo kvarta je osvetljen. Cilj je da sve svetli."), hPow:Tx("Struja: koliko lampi troši i koliko generator može da da. Kad se napuni, kupi jači generator."), hPhase:Tx("Vreme do zore ili do noći. Noću se zarađuje, a danju su popravke jeftinije.")};
 for (const id in CHIP_HELP) { const b = $(id), c = b && b.closest(".chip"); if (c) { c.style.cursor = "help"; c.addEventListener("click", () => msg(CHIP_HELP[id])); } }
-let last = performance.now(), uiT = 0, autoT = 15;
+let last = performance.now(), uiT = 0, autoT = 15, ambT = .2;
 function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
   tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) mgrTick(dt);
+  ambT -= dt; if (ambT <= 0) { AMB.update(.2 - ambT); ambT = .2; }
   autoT -= dt; if (autoT <= 0) { autoT = 15; if (S.started && !hold) save(); }   // autosave every 15 s of play
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
