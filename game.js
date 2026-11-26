@@ -781,7 +781,16 @@ const wearLv = L => { const p = Math.ceil(L.life * 100); return L.state === "bur
 const WEAR_F = [1, .8, 1.25, 1.5, 2], WEAR_COL = ["#9fe0b3", "#f1c453", "#ff9f43", "#ff6b5b", "#ff6b5b"];
 const wearName = lv => [Tx("dobra"), Tx("pazi, uskoro zamena"), Tx("zameni je"), Tx("hitna zamena"), Tx("izgorela")][lv];
 const swapCost = (L, m = L.m) => Math.ceil(bulbCost(m) * WEAR_F[wearLv(L)]);   // what a new bulb costs right now for this lamp
-const fixCost = L => L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : swapCost(L);
+// Which bulb the service crew puts in when it replaces one (shop setting S.svcBulb). "auto": the same bulb, but a saver one while the generator is over 85%.
+const SVC_OPTS = ["auto", "same", "st", "led", "ob", "ja"];
+const svcName = id => id === "auto" ? Tx("Pametno") : id === "same" ? Tx("Ista kao pre") : BULBS[id].name;
+function svcModel(L) {
+  const id = S.svcBulb || "auto";
+  if (BULBS[id]) return combo(L.m.f.id, id);
+  if (id === "auto" && L.m.b.power > 1 && S.load > .85) return combo(L.m.f.id, "st");
+  return L.m;
+}
+const fixCost = L => L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : swapCost(L, svcModel(L));
 let wearMsgT = 0;
 function wearWarn(s, lv) {
   const L = s.lamp, c = swapCost(L);
@@ -908,7 +917,7 @@ function tapSlot(s, direct) {
   if (tool && tool.f !== L.m.f) { if (preview(s, tool, direct)) return; order(s, "install", tool, tool.cost); return; }
   S.pending = null;
   if (L.state === "broken") { order(s, "repair", L.m, fixCost(L)); return; }
-  const nb = tool || L.m;
+  const nb = tool || (L.state === "burnt" || L.life < .95 ? svcModel(L) : L.m);
   if (L.state === "burnt" || L.life < .95 || nb !== L.m) { order(s, "bulb", nb, swapCost(L, nb)); return; }
   msg(Tx`${L.m.name} radi, ${Math.ceil(L.life * 100)}% veka. ${moodOf(s, L.m)[1]}`);
 }
@@ -1193,6 +1202,8 @@ $("awayOk").onclick = () => { $("away").hidden = true; };
 $("upTrafo").onclick = () => { const c = TRAFO_COST[S.trafo || 0]; if (S.genLv >= 3 && c && S.money >= c) { S.money -= c; S.led.buy += c; S.trafo = (S.trafo || 0) + 1; SFX.buy(); msg(Tx`Nova trafostanica: kapacitet je sada ${genCap()}.`); save(); } };
 $("upSolar").onclick = () => { if (S.unlocked && !S.solar && S.money >= SOLAR_COST) { S.money -= SOLAR_COST; S.led.buy += SOLAR_COST; S.solar = true; SFX.buy(); msg(Tx`Solarni paneli: kapacitet ${genCap()}, struja 30% jeftinija.`); save(); } };
 $("upUps").onclick = () => { if (!S.ups && S.money >= UPS_COST) { S.money -= UPS_COST; S.led.buy += UPS_COST; S.ups = true; S.upsCharge = UPS_SEC; SFX.buy(); msg(Tx`UPS baterija: kad generator stane, svetla rade još ${UPS_SEC} sekundi.`); save(); } };
+$("upSvcBulb").onclick = () => { const i = SVC_OPTS.indexOf(S.svcBulb || "auto"); S.svcBulb = SVC_OPTS[(i + 1) % SVC_OPTS.length]; SFX.click();
+  msg(S.svcBulb === "auto" ? Tx("Servis stavlja istu sijalicu, a kad je generator preko 85% stavlja štedljivu.") : S.svcBulb === "same" ? Tx("Servis stavlja istu sijalicu kakva je bila.") : Tx`Servis od sada stavlja sijalicu: ${BULBS[S.svcBulb].name} (struja ${BULBS[S.svcBulb].power}).`); updateUI(); save(); };
 $("upDispatch").onclick = () => { if (S.dispatch) { S.dispOff = !S.dispOff; SFX.click(); msg(S.dispOff ? Tx("Auto-dispečing je ISKLJUČEN: štediš novac, lampe popravljaš sam.") : Tx("Auto-dispečing je UKLJUČEN: servis sam ide na kvarove.")); save(); return; }
   if (!S.dispatch && S.money >= DISPATCH_COST) { S.money -= DISPATCH_COST; S.led.buy += DISPATCH_COST; S.dispatch = true; SFX.buy(); msg(Tx("Auto-dispečing je uključen: servis sam ide na razbijene i izgorele lampe.")); save(); } };
 $("upMgr").onclick = () => mgrHire();
@@ -1774,7 +1785,7 @@ let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => { if (document.hidden) { hiddenAt = Date.now(); save(); if (S.started && !S.paused) $("btnPause").click(); } else if (hiddenAt && S.started) { const t = hiddenAt; hiddenAt = 0; awayReport(t); } });
 window.addEventListener("pagehide", save);
 
-const UP_ICO = {upCrane:"crane", upArmor:"armor", upInd:"factory", upCen:"center", upHeat:"heat", upFixAll:"fixall", upSensor:"sensor", upGlass:"glass", upDispatch:"dispatch", upMgr:"wrench", upLoan:"bank", upTender:"tender", upGen:"gen", upTrafo:"bolt", upSolar:"sun", upUps:"ups", upGenFix:"wrench", upVan:"van", upSpeed:"van", upPlot:"plot"};
+const UP_ICO = {upCrane:"crane", upArmor:"armor", upInd:"factory", upCen:"center", upHeat:"heat", upFixAll:"fixall", upSensor:"sensor", upGlass:"glass", upDispatch:"dispatch", upSvcBulb:"fixall", upMgr:"wrench", upLoan:"bank", upTender:"tender", upGen:"gen", upTrafo:"bolt", upSolar:"sun", upUps:"ups", upGenFix:"wrench", upVan:"van", upSpeed:"van", upPlot:"plot"};
 function setUp(el, title, desc, cost) {
   const can = cost != null && S.money >= cost, ic = UP_ICO[el.id];
   el.innerHTML = Tx`<b>${ic ? svgI(SHOP_ICO[ic] || TY_ICO[ic], "svg-ico up-ico") : ""}${title}</b><span>${desc}</span><span>${cost == null ? Tx("Maksimum") : Tx`<em>${cost} $</em>`}</span>`;
@@ -1822,6 +1833,9 @@ function updateUI() {
   setUp($("upSolar"), Tx("Solarni paneli"), S.unlocked ? Tx`+${SOLAR_CAP} struje i 30% jeftinija struja` : Tx("Posle kupovine starog kvarta"), S.unlocked && !S.solar ? SOLAR_COST : null);
   if (!S.unlocked) $("upSolar").querySelector("span:last-child").textContent = Tx("Zaključano");
   setUp($("upUps"), Tx("UPS baterija"), S.ups ? Tx`Drži svetla ${UPS_SEC}s kad generator stane. Puni se danju` : Tx`Kad generator štucne ili osigurač iskoči, drži svetla još ${UPS_SEC}s`, S.ups ? null : UPS_COST);
+  { const id = S.svcBulb || "auto", B = BULBS[id];
+    setUp($("upSvcBulb"), Tx("Servis stavlja"), id === "auto" ? Tx("Istu sijalicu, a štedljivu kad je generator preko 85%. Dodirni da promeniš") : id === "same" ? Tx("Istu sijalicu kakva je bila. Dodirni da promeniš") : Tx`${B.name}: struja ${B.power}, vek ${B.life}s. Dodirni da promeniš`, 0);
+    const e = $("upSvcBulb"); e.disabled = false; e.classList.remove("cant"); e.querySelector("span:last-child").innerHTML = `<span class="sw on">${esc(svcName(id))}</span>`; }
   setUp($("upDispatch"), Tx("Auto-dispečing"), S.dispatch ? (S.dispOff ? Tx("Isključen: dodirni da ga uključiš") : Tx("Servis sam ide na kvarove. Dodirni da isključiš")) : Tx("Servis sam popravlja lampe čim ima para"), S.dispatch ? null : DISPATCH_COST);
   if (S.dispatch) { const e = $("upDispatch"); e.disabled = false; e.classList.toggle("toggle-off", S.dispOff); e.querySelector("span:last-child").innerHTML = S.dispOff ? Tx('<span class="sw">ISKLJ</span>') : Tx('<span class="sw on">UKLJ</span>'); } else $("upDispatch").classList.remove("toggle-off");
   { const fl = fixList(), tot = fl.reduce((a, f) => a + f.cost, 0);
@@ -1865,7 +1879,7 @@ function updateUI() {
   if (s2 && s2.plot && !S.unlocked) html = Tx`<b>Stari kvart</b><br>Zaključano. Kupi ga u nadogradnjama.`;
   else if (s2 && s2.lamp) {
     const L = s2.lamp, [mood, why] = moodOf(s2, L.m);
-    const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${fixCost(L)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${swapCost(L)} $ (duplo, jer je izgorela)` : !L.powered ? Tx("bez struje, generator je pun") : wearLv(L) ? Tx`radi, ${wearName(wearLv(L))}: dodir = nova sijalica ${swapCost(L)} $` : Tx("radi");
+    const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${fixCost(L)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${svcModel(L).b.name} za ${fixCost(L)} $ (duplo, jer je izgorela)` : !L.powered ? Tx("bez struje, generator je pun") : wearLv(L) ? Tx`radi, ${wearName(wearLv(L))}: dodir = nova ${svcModel(L).b.name} za ${fixCost(L)} $` : Tx("radi");
     html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`; if (mgrHas(s2)) html += "<br>" + Tx`Ovaj deo održava majstor (${mgrName(mgrArea(s2))}).`;
   } else if (s2) html = Tx`<b>${s2.zone === "park" ? Tx("Mesto u parku") : s2.district === "stari" ? Tx("Mesto u starom kvartu") : Tx("Prazno mesto na ulici")}</b><br>${toolModel() ? Tx`Dodir = radar, drugi dodir = montaža (${toolModel().name}, ${toolModel().cost} $)` : Tx("Izaberi svetiljku, pa dodirni ovde.")}`;
   else { const L = S.led, r = v => Math.round(v);
@@ -2459,7 +2473,7 @@ function fixAll() {
   for (const f of list) {
     if (S.money < f.cost) break;
     S.money -= f.cost; S.led.buy += f.cost; spent += f.cost; n++;
-    const j = {slot:f.s, type:f.type, m:f.s.lamp.m, assigned:false, wb:f.type === "repair" && f.s.lamp.life <= .05}; f.s.job = j; jobs.push(j);
+    const j = {slot:f.s, type:f.type, m:f.type === "bulb" ? svcModel(f.s.lamp) : f.s.lamp.m, assigned:false, wb:f.type === "repair" && f.s.lamp.life <= .05}; f.s.job = j; jobs.push(j);
   }
   if (!n) { msg(Tx`Nemaš dovoljno novca ni za prvu popravku (${list[0].cost} $).`, true); SFX.err(); return; }
   SFX.buy(); msg(n < list.length ? Tx`Servis kreće na ${n} od ${list.length} lampi (−${spent} $). Za ostale fali novca.` : Tx`Servis kreće na sve lampe: ${n} (−${spent} $).`, n < list.length); save();
@@ -2534,7 +2548,7 @@ function autoDispatch(dt) {
   if (!s) return;
   const L = s.lamp, cost = fixCost(L);
   if (S.money < cost + 20) return;   // keep a small reserve
-  order(s, L.state === "broken" ? "repair" : "bulb", L.m, cost);
+  order(s, L.state === "broken" ? "repair" : "bulb", L.state === "broken" ? L.m : svcModel(L), cost);
   msg(Tx`Auto-dispečing: servis sam kreće na ${L.state === "broken" ? "popravku" : Tx("zamenu sijalice")} (${cost} $).`);
 }
 
@@ -2568,7 +2582,7 @@ function mgrTick(dt) {
     todo.sort((x, y) => (y.lamp.state === "broken" ? 2 : y.lamp.state === "burnt" ? 1 : 0) - (x.lamp.state === "broken" ? 2 : x.lamp.state === "burnt" ? 1 : 0));
     const s = todo[0], L = s.lamp, cost = fixCost(L);
     if (S.money < cost + 20) continue;   // keeps a small reserve, like auto-dispatch
-    order(s, L.state === "broken" ? "repair" : "bulb", L.m, cost);
+    order(s, L.state === "broken" ? "repair" : "bulb", L.state === "broken" ? L.m : svcModel(L), cost);
     if (mgrMsgT <= 0) { mgrMsgT = 6; msg(Tx`Majstor (${mgrName(a)}) šalje servis: ${L.state === "broken" ? Tx("popravka") : Tx("nova sijalica")} (${cost} $).`); }
   }
 }
