@@ -548,16 +548,44 @@ function save() {
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
-    localStorage.setItem(SAVE_KEY, JSON.stringify(d));
-  } catch (e) {}
+    const js = JSON.stringify(d);
+    localStorage.setItem(SAVE_KEY, js);
+    if (Date.now() - bakAt > 60000) { bakAt = Date.now(); localStorage.setItem(SAVE_KEY + ".bak", js); }   // a second copy, at most a minute old: if the main save is ever broken, the game starts from this one
+    saveFail = 0;
+  } catch (e) { if (!saveFail++) msg(Tx("Igra ne može da se sačuva: na uređaju nema mesta. Oslobodi malo prostora."), true); }
 }
-function readSave() {   // a broken or partial save must never stop the game from starting
-  try {
-    const d = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
-    if (!d || (d.v !== 2 && d.v !== 3) || !d.S || typeof d.S !== "object") { if (d) try { localStorage.removeItem(SAVE_KEY); } catch (e) {} return null; }
-    return d;
-  } catch (e) { try { localStorage.removeItem(SAVE_KEY); } catch (e2) {} return null; }
+let bakAt = 0, saveFail = 0;
+const saveOk = d => d && (d.v === 2 || d.v === 3) && d.S && typeof d.S === "object";
+function readSave() {   // a broken or partial save must never stop the game from starting: then the backup copy is used
+  for (const k of [SAVE_KEY, SAVE_KEY + ".bak"]) {
+    try { const d = JSON.parse(localStorage.getItem(k) || "null"); if (saveOk(d)) { if (k !== SAVE_KEY) setTimeout(() => msg(Tx("Glavni snimak je bio oštećen, pa je igra vraćena iz rezervne kopije.")), 1500); return d; } } catch (e) {}
+  }
+  return null;
 }
+// a copy of the whole game in a file: for a new phone, or before clearing the browser
+const BK_SKIP = /\.(zoom|sideOff|view|map)$|^lightThemUp\.(zoomQ4|zoom4)$/;
+function backupFile() {
+  if (S.started) save();
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith("lightThemUp.") && !k.endsWith(".bak") && !BK_SKIP.test(k)) data[k] = localStorage.getItem(k); }
+  const blob = new Blob([JSON.stringify({game:"light-them-up", v:1, at:Date.now(), data})], {type:"application/json"}), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "light-them-up-" + new Date().toISOString().slice(0, 10) + ".json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  msg(Tx("Kopija igre je sačuvana kao fajl. Na novom telefonu je vrati dugmetom Vrati igru iz kopije.")); bkSay("btnBackup", Tx("Kopija je sačuvana ✓"));
+}
+function bkSay(id, t) { const b = $(id), t0 = b.dataset.t0 || b.textContent; b.dataset.t0 = t0; b.textContent = t; clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = t0; }, 3500); }
+function backupLoad(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const j = JSON.parse(r.result); if (!j || j.game !== "light-them-up" || !j.data || typeof j.data !== "object") throw 0;
+      const keys = Object.keys(j.data).filter(k => k.startsWith("lightThemUp.") && typeof j.data[k] === "string"); if (!keys.length) throw 0;
+      if (!confirm(Tx("Vratiti igru iz kopije? Sadašnja igra na ovom uređaju biće zamenjena."))) return;
+      NOSAVE = true; for (const k of keys) localStorage.setItem(k, j.data[k]); location.reload();
+    } catch (e) { msg(Tx("Ovaj fajl nije kopija igre Light Them Up."), true); bkSay("btnRestore", Tx("Ovaj fajl nije kopija igre Light Them Up.")); }
+  };
+  r.readAsText(file);
+}
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}   // asks the browser not to clear the game's data when the phone runs low on space
 function load(d) {
   try {
     resetGame(); Object.assign(S, d.S);
@@ -573,7 +601,7 @@ function load(d) {
     return true;
   } catch (e) { resetGame(); return false; }
 }
-function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY + ".bak"); } catch (e) {} }
 
 // ---------- Canvas ----------
 const cv = document.getElementById("cv"), ctx0 = cv.getContext("2d");
@@ -1725,6 +1753,9 @@ function autoQuarter() {
   setTimeout(openPicker, 2600);
 }
 
+$("btnBackup").onclick = () => { SFX.click(); backupFile(); };
+$("btnRestore").onclick = () => { SFX.click(); $("bkFile").value = ""; $("bkFile").click(); };
+$("bkFile").onchange = e => { const f = e.target.files && e.target.files[0]; if (f) backupLoad(f); };
 $("btnNew2").onclick = () => { clearSave(); saved = null; resetGame(); try { localStorage.removeItem(TUT_KEY); } catch (e) {} begin(); setTimeout(tutStart, 500); msg(Tx("Nova igra. Srećno!")); };
 let newArm = 0;
 $("btnNew").onclick = () => {
@@ -3440,12 +3471,13 @@ $("tutNext").onclick = tutNext; $("tutSkip").onclick = tutEnd;
 $("btnTut").onclick = () => { $("btnTut").hidden = true; $("btnStart").click(); setTimeout(() => tutStart(true), 300); };
 const CHIP_HELP = {hMoney:Tx("Novac: od njega kupuješ lampe, popravke i stvari u Prodavnici."), hInc:Tx("Prihod: koliko zarađuješ u sekundi. Stanari plaćaju noću, dok im lampe svetle."), hCover:Tx("Svetlo: koliki deo kvarta je osvetljen. Cilj je da sve svetli."), hPow:Tx("Struja: koliko lampi troši i koliko generator može da da. Kad se napuni, kupi jači generator."), hPhase:Tx("Vreme do zore ili do noći. Noću se zarađuje, a danju su popravke jeftinije.")};
 for (const id in CHIP_HELP) { const b = $(id), c = b && b.closest(".chip"); if (c) { c.style.cursor = "help"; c.addEventListener("click", () => msg(CHIP_HELP[id])); } }
-let last = performance.now(), uiT = 0;
+let last = performance.now(), uiT = 0, autoT = 15;
 function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
   tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) mgrTick(dt);
+  autoT -= dt; if (autoT <= 0) { autoT = 15; if (S.started && !hold) save(); }   // autosave every 15 s of play
   render();
   uiT -= dt; if (uiT <= 0) { uiT = .12; updateUI(); }
   requestAnimationFrame(frame);

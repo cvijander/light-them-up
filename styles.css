@@ -315,3 +315,5 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
 .lk.on{border-color:var(--sodium);box-shadow:0 0 0 1px var(--sodium) inset}
 .lk:disabled{opacity:.5;cursor:default}
 .lk-xmas{background:conic-gradient(#ff4d4d 0 25%,#4dff88 0 50%,#ffd84a 0 75%,#4da6ff 0)!important}
+.bk-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bk-row .ghost{font-size:12px;padding:6px 4px;min-height:34px}
