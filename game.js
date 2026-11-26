@@ -476,7 +476,7 @@ function newLamp(m, life = 1) { return {m, life, hp:LAMP_HP, state:"ok", order:S
 const vanGate = v => MAP ? {x:DEPOT.x, y:DEPOT.y} : {x:DEPOT.x, y:v.home.y};
 const vanRoute = (v, q) => v.state === "home" ? [vanGate(v), ...route(vanGate(v), q)] : route(v, q);
 const vanBack = v => [...route(v, vanGate(v)), {x:v.home.x, y:v.home.y}];
-function addVan() { const i = vans.length, hm = {x:DEPR.x + 31, y:DEPR.y + 35 + (i % 4) * 22}, v = {i, x:hm.x, y:hm.y, home:hm, path:[], state:"home", job:null, t:0}; const g = vanGate(v); v.ang = g.x < hm.x ? Math.PI : 0; vans.push(v); }   // straight in its bay, nose toward the street
+function addVan() { const i = vans.length, hm = {x:DEPR.x + 31, y:DEPR.y + 35 + (i % 4) * 22}, v = {i, x:hm.x, y:hm.y, home:hm, path:[], state:"home", job:null, t:0}; const g = vanGate(v); v.ang = v.homeAng = g.x < hm.x ? Math.PI : 0; vans.push(v); }   // straight in its bay, nose toward the street
 function startLamps() {
   if (MAP) return startLampsMap();
   const at = (rx, ry) => slots.find(s => s.rx === rx && s.ry === ry);
@@ -2050,7 +2050,7 @@ function step(dt) {
         if (d > .01) v.ang = Math.atan2(dy, dx);
         if (d <= st) { v.x = q.x; v.y = q.y; v.path.shift(); st -= d; } else { v.x += dx / d * st; v.y += dy / d * st; st = 0; }
       }
-      if (!v.path.length) { if (v.state === "drive") { v.state = "work"; v.t = WORK_TIME / SPEED_MULT[S.speedLv] * (S.crane && v.job.type === "install" && v.job.m.kind === "ulica" ? .5 : 1); } else v.state = "home"; }
+      if (!v.path.length) { if (v.state === "drive") { v.state = "work"; v.t = WORK_TIME / SPEED_MULT[S.speedLv] * (S.crane && v.job.type === "install" && v.job.m.kind === "ulica" ? .5 : 1); } else { v.state = "home"; v.ang = v.homeAng; } }   // back in its bay: it turns to face the street like the others
     } else if (v.state === "work") {
       const threat = !S.armor && S.phase === "night" && hoods.some(h => h.state !== "flee" && Math.hypot(h.x - v.x, h.y - v.y) < 80);
       v.wait = threat; v.waitCd = Math.max(0, (v.waitCd || 0) - dt);
