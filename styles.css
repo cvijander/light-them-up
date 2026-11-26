@@ -317,3 +317,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
 .lk-xmas{background:conic-gradient(#ff4d4d 0 25%,#4dff88 0 50%,#ffd84a 0 75%,#4da6ff 0)!important}
 .bk-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .bk-row .ghost{font-size:12px;padding:6px 4px;min-height:34px}
+.ct-t{width:100%;border-collapse:collapse;font-size:13.5px}
+.ct-t th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;text-align:left;padding:4px 4px 6px;border-bottom:1px solid var(--line)}
+.ct-t td{padding:7px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ct-t td:nth-child(2){white-space:normal;overflow-wrap:break-word;color:var(--ink);font-weight:600}
+.ct-t tr.here td{background:rgba(255,168,72,.12)}
+.ct-t td b{color:var(--sodium)}
+.ct-share{justify-self:start}

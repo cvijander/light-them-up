@@ -1489,7 +1489,7 @@ function dailyTick(dt) {   // checks the calendar now and then, so playing past 
   dailyGift();
 }
 // ---------- Goals panel (trophy button): daily tasks, and more tabs later ----------
-const GOAL_TABS = [{id:"daily", name:Tx("Zadaci"), draw:drawDaily}, {id:"lv", name:Tx("Nivoi"), draw:drawLevels}, {id:"md", name:Tx("Medalje"), draw:drawMedals}, {id:"lk", name:Tx("Ukrasi"), draw:drawLooks}];
+const GOAL_TABS = [{id:"daily", name:Tx("Zadaci"), draw:drawDaily}, {id:"lv", name:Tx("Nivoi"), draw:drawLevels}, {id:"md", name:Tx("Medalje"), draw:drawMedals}, {id:"lk", name:Tx("Ukrasi"), draw:drawLooks}, {id:"ct", name:Tx("Gradovi"), draw:drawCities}];
 let glTab = "daily", glWasPaused = false;
 function goalsOpen(tab) {
   if (tab) glTab = tab; glWasPaused = S.paused; S.paused = true; setPauseLabel();
@@ -1625,6 +1625,32 @@ $("glBody").addEventListener("click", e => {
   if (k === "lights") LOOK.lights = !LOOK.lights; else if (lookFree(k, b.dataset.v)) LOOK[k] = b.dataset.v;
   lookSave(); xmasOn = LOOK.lights && lightsOpen(); SFX.click(); goalsDraw();
 });
+// ---------- City table: the best result in every town played on this device (no server, so it is a personal table) ----------
+const CT_KEY = "lightThemUp.cities";
+const ctGet = () => { try { const d = JSON.parse(localStorage.getItem(CT_KEY) || "{}"); return d && typeof d === "object" ? d : {}; } catch (e) { return {}; } };
+const ctShow = n => n === "~inv" ? Tx("Izmišljeni kvart") : n;
+const ctName = () => !MAP ? "~inv" : MAP.part === "my" && CITYD ? CITYD.name : "Borča";
+const ctScore = c => Math.round(c.cover * 10 + Math.min(c.nights, 100) * 3 + c.pay / 10);   // light first, then how long and how well
+function ctDawn(pay) {   // called every dawn
+  const d = ctGet(), k = ctName(), c = Object.assign({cover:0, nights:0, pay:0, lamps:0, t:0}, d[k]);
+  c.cover = Math.max(c.cover, Math.floor(S.cover * 100)); c.nights++; c.pay = Math.max(c.pay, Math.round(pay || 0)); c.lamps = Math.max(c.lamps, slots.filter(s => s.lamp && s.lamp.state === "ok").length); c.t = Date.now();
+  d[k] = c; try { localStorage.setItem(CT_KEY, JSON.stringify(d)); } catch (e) {}
+}
+function drawCities() {
+  const d = ctGet(), here = ctName(), rows = Object.entries(d).map(([n, c]) => ({n, ...c, sc:ctScore(c)})).sort((a, b) => b.sc - a.sc);
+  if (!rows.length) return `<p class="gl-note">${Tx("Ovde se upisuje svaki grad u kom dočekaš zoru: koliko si ga osvetlio, koliko noći i najbolja noć. Dočekaj prvu zoru!")}</p>`;
+  return `<table class="ct-t"><thead><tr><th>#</th><th>${Tx("Grad")}</th><th>${Tx("Svetlo")}</th><th>${Tx("Noći")}</th><th>${Tx("Najbolja noć")}</th><th>${Tx("Poeni")}</th></tr></thead><tbody>` +
+    rows.map((r, i) => `<tr${r.n === here ? ' class="here"' : ""}><td>${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</td><td>${esc(ctShow(r.n))}</td><td>${r.cover}%</td><td>${r.nights}</td><td>${r.pay} $</td><td><b>${r.sc}</b></td></tr>`).join("") + `</tbody></table>` +
+    `<button class="ghost ct-share" type="button" id="ctShare">${Tx("Podeli rezultat")}</button>` +
+    `<p class="gl-note">${Tx("Ovo je tvoja lična tabela na ovom uređaju. Poeni: svetlo × 10, plus 3 za svaku noć i deseti deo najbolje noći. Zajednička tabela sa drugim igračima iz celog sveta traži server i dolazi kasnije.")}</p>`;
+}
+function ctShare() {
+  const d = ctGet(), k = d[ctName()] ? ctName() : Object.keys(d)[0], c = d[k]; if (!c) return;
+  const t = Tx`Light Them Up: ${ctShow(k)} je osvetljen ${c.cover}% posle ${c.nights} noći (${ctScore(c)} poena). Možeš li bolje u svom gradu?`, url = location.origin + location.pathname;
+  if (navigator.share) navigator.share({title:"Light Them Up", text:t, url}).catch(() => {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(t + " " + url).then(() => { const b = $("ctShare"); if (b) b.textContent = Tx("Kopirano ✓"); }, () => {});
+}
+$("glBody").addEventListener("click", e => { if (e.target.closest("#ctShare")) { SFX.click(); ctShare(); } });
 // ---------- Records: a few numbers that follow the player across games and towns ----------
 const REC_KEY = "lightThemUp.records";
 function recs() { try { return Object.assign({nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}, JSON.parse(localStorage.getItem(REC_KEY) || "{}")); } catch (e) { return {nights:0, thieves:0, hoods:0, rep:0, cover:0, auto:0, cities:[]}; } }
@@ -2040,7 +2066,7 @@ function step(dt) {
       const L = S.led, r = v => Math.round(v);
       const net = r(L.pay + L.bounty + (L.obj || 0) + (L.ten || 0) + (L.auto || 0) - L.fuel - L.buy - (L.wage || 0) - (L.theft || 0) - (L.mis || 0));
       S.report = Tx`Noć ${S.night}: stanari +${r(L.pay)} $, nagrade +${r(L.bounty)} $,${L.obj ? Tx` trafika i stajalište +${r(L.obj)} $,` : ""} struja −${r(L.fuel)} $${S.tariff > 1 ? Tx(" (skupa tarifa)") : ""}, kupovina i popravke −${r(L.buy)} $${L.wage ? Tx`, plate −${r(L.wage)} $` : ""}${L.ten ? Tx`, tender ${L.ten > 0 ? "+" : "−"}${r(Math.abs(L.ten))} $` : ""}${L.theft ? Tx`, lopovi −${r(L.theft)} $` : ""}${L.mis ? Tx`, kazna misije −${r(L.mis)} $` : ""}. Ukupno ${net >= 0 ? "+" : ""}${net} $.${misLine}${bigLine}${tenLine}${loanLine} Reputacija ${S.rep}${repD >= 0 ? " (+" + repD + ")" : " (" + repD + ")"}.${S.trafficPay ? Tx` Putarina +${S.trafficPay} $.` : ""}${(S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""}`;
-      S.trafficPay0 = S.trafficPay; S.trafficPay = 0; S.lastPay = L.pay; S.led = {pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0};
+      S.trafficPay0 = S.trafficPay; S.trafficPay = 0; S.lastPay = L.pay; ctDawn(L.pay); S.led = {pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0};
       for (const t of thieves) if (t.state !== "flee") { t.state = "flee"; t.exit = edgeFor(t); }
       for (const c of CARS) c.gone = false;
       for (const h of hoods) scare(h, true);
