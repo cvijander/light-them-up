@@ -2342,7 +2342,8 @@ function drawSeats() {
     uprightAt(ctx, st.x, st.y, () => { ctx.save(); ctx.translate(st.x, st.y); ctx.scale(k, k);
       ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(0, .5, 6, 1.6, 0, 0, 6.28); ctx.fill();
       if (st.kind === "bench") { ctx.fillStyle = "#6b4a2e"; ctx.fillRect(-6, -3.2, 12, 1.6); ctx.fillRect(-6, -6.4, 12, 1.4); ctx.fillStyle = "#2c2f36"; ctx.fillRect(-5.5, -1.8, 1, 1.8); ctx.fillRect(4.5, -1.8, 1, 1.8); }
-      else { ctx.fillStyle = "#d8d2c0"; ctx.fillRect(-.5, -9, 1, 9); ctx.fillStyle = (st.x | 0) % 2 ? "#c84a3c" : "#3d7a4a"; ctx.beginPath(); ctx.moveTo(-7, -9); ctx.lineTo(7, -9); ctx.lineTo(0, -12.5); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#e8e4da"; ctx.fillRect(-3.5, -4, 7, 1.2); }   // umbrella and table
+      else { ctx.fillStyle = "#3a3f4a"; ctx.fillRect(-7.5, -2.6, 2.4, 2.6); ctx.fillRect(5.1, -2.6, 2.4, 2.6); ctx.fillStyle = "#cfc8b4"; ctx.fillRect(-.4, -9, .8, 5); ctx.fillRect(-.6, -3, 1.2, 3); ctx.fillStyle = "#e8e4da"; ctx.beginPath(); ctx.ellipse(0, -3.6, 4.2, 1.3, 0, 0, 6.28); ctx.fill();   // chairs, a round table
+        ctx.fillStyle = (st.x | 0) % 2 ? "#c84a3c" : "#3d7a4a"; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.quadraticCurveTo(0, -14.5, 8, -9); ctx.closePath(); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(-8, -9.4, 16, .8); }   // umbrella
       if (busy) for (const dx of st.kind === "bench" ? [-2.8, 2.6] : [-5, 5]) { const c = PED_COLS[(st.x + dx * 3 | 0) % PED_COLS.length & 7] || "#81b29a"; ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(dx - 1.8, -8.6, 3.6, 5, 1.4); ctx.fill(); ctx.fillStyle = "#2c3344"; ctx.fillRect(dx - 1.6, -3.8, 3.2, 1.4); ctx.fillStyle = "#f1d3b3"; ctx.beginPath(); ctx.arc(dx, -10.2, 1.7, 0, 6.28); ctx.fill(); }
       ctx.restore(); });
   }
@@ -2980,10 +2981,7 @@ function render() {
   drawTraffic();
   for (const v of vans) drawVan(v);
   if (S.patrol) {
-    const P = S.patrol; ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.ang);
-    ctx.fillStyle = "#e8ecf3"; ctx.fillRect(-12, -7, 24, 14); ctx.fillStyle = "#2b4fb0"; ctx.fillRect(-12, -2, 24, 4);
-    const on = (performance.now() / 300 | 0) % 2; ctx.fillStyle = on ? "#4d8bff" : "#ff4d4d"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 12; ctx.fillRect(-3, -6, 6, 12); ctx.shadowBlur = 0;
-    ctx.restore();
+    const P = S.patrol; drawVehicle(P, P.x, P.y, P.ang, "police", "#eef1f6", S.phase === "night" ? "on" : "off");   // the patrol is a 3D police car with a flashing light bar
   }
   for (const v of vans) {
     if (v.state === "work") { const onb = (performance.now() / 250 | 0) % 2; ctx.fillStyle = onb ? "#ffb02e" : "#7a4b0a"; ctx.shadowColor = "#ffb02e"; ctx.shadowBlur = onb ? 10 : 0; ctx.beginPath(); ctx.arc(v.x, v.y, 3, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0; }
