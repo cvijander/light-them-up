@@ -3381,6 +3381,9 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
     spot:() => tut.br ? {x:tut.br.x, y:tut.br.y} : null, done:() => !!tut.br.job},
   {el:"cv", t:Tx("Popravka"), s:Tx("Kombi vozi do lampe i popravlja je. Danju su popravke upola jeftinije. Izgorela sijalica se menja sama, bez novog stuba."), act:true, run:true,
     spot:() => tut.br ? {x:tut.br.x, y:tut.br.y} : null, done:() => tut.t > 60 || (!tut.br.job && tut.br.lamp && tut.br.lamp.state === "ok")},
+  {el:"cv", t:Tx("Zameni sijalicu"), s:Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba."), act:true,
+    enter:() => { const s0 = slots.find(s => s !== tut.br && s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; if (S.tool) setTool(null); s0.lamp.life = 0; s0.lamp.state = "burnt"; tut.bu = s0; S.money = Math.max(S.money, 60); },
+    spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => !!tut.bu.job},
   {el:"cv", t:Tx("Nezadovoljni stanari"), s:Tx("Tužno lice iznad lampe znači da stanarima ta lampa ne odgovara, pa plaćaju manje. Hajde da je zamenimo."), hand:"char",
     enter:() => { for (const s of slots) { if (!s.lamp || s.lamp.state !== "ok" || s.job || !avail(s) || moodOf(s, s.lamp.m)[0] >= 0) continue;
       const f = Object.keys(FIXTURES).find(f => moodOf(s, combo(f, "ob"))[0] > 0); if (f) { tut.rs = s; tut.rf = f; if (S.tool) setTool(null); return; } } return false; },
