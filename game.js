@@ -757,9 +757,11 @@ function litAt(x, y, k, on) {
   if (!on && S.patrol && Math.hypot(S.patrol.x - x, S.patrol.y - y) < PATROL.r * k) return true;
   return false;
 }
+const byPark = s => { const d = 20; return [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d]].some(([dx, dy]) => MAP ? inParkMap(s.x + dx, s.y + dy) : s.x + dx > PARK[0] && s.x + dx < PARK[0] + PARK[2] && s.y + dy > PARK[1] && s.y + dy < PARK[1] + PARK[3]); };
 function moodOf(s, m) {
   if (s.zone === "park") return m.kind === "park" ? [1, Tx("U parku vole fenjere.")] : [-1, Tx("U parku stanari žele fenjer.")];
   if (s.zone === "dvoriste") return m.kind === "park" ? [1, Tx("Fenjer u dvorištu: stanari vole, a svetli bojom ulice.")] : [-1, Tx("U dvorište između zgrada ide fenjer.")];
+  if (m.kind === "park" && byPark(s)) return [1, Tx("Fenjer uz park: stanari ga vole.")];   // a street spot at the park's edge looks like it is in the park
   const zk = zoneAt(s.x, s.y);
   if (zk === "ind") return m.style === "moderna" ? [1, Tx("Industrijska zona voli jaku, hladnu LED rasvetu.")] : m.kind === "park" ? [-1, Tx("Fenjer ne valja za fabrike.")] : [0, Tx("Fabrikama treba moderna LED rasveta.")];
   if (zk === "cen") return m.style === "klasična" ? [1, Tx("Šetalište voli toplo, dekorativno svetlo.")] : [-1, Tx("Na šetalištu ne vole hladnu LED svetiljku.")];
