@@ -994,8 +994,42 @@ function startPatrol() {
   if (!MAP) ys.forEach((y, i) => { const a = xs[i % 2], b = xs[(i + 1) % 2]; path.push({x:a, y}, {x:b, y}); });
   if (!MAP) path.push({x:DEPOT.x, y:path[path.length - 1].y}, {x:DEPOT.x, y:DEPOT.y});
   S.patrol = {x:DEPOT.x, y:DEPOT.y, ang:-Math.PI / 2, path};
-  tip("patrol", Tx("Patrola je krenula"), Tx("Vozilo obilazi sve ulice i tera huligane. Kad završi krug, kvart je miran 30 sekundi."));
+  tip("patrol", Tx("Patrola je krenula"), Tx("Vozilo obilazi sve ulice, tera huligane i juri lopove. Kad završi krug, kvart je miran 30 sekundi."));
   msg(Tx("Patrola obilazi kvart…"));
+}
+// The patrol drives like a car: it turns at a limited rate, slows down into corners and turns almost on the spot for a U-turn,
+// instead of snapping its nose around. It also hunts thieves: it leaves its round, drives to the nearest one along the streets,
+// catches him when it gets close, and then goes back to its round.
+const PATROL_TURN = 3.2, PATROL_CATCH = 34;
+const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+function onStreet(p) {   // nearest point on a street (the invented quarter; real maps route along their own streets)
+  if (MAP) return {x:p.x, y:p.y};
+  const x = VS.reduce((b, v) => Math.abs(v - p.x) < Math.abs(b - p.x) ? v : b), y = hs().reduce((b, v) => Math.abs(v - p.y) < Math.abs(b - p.y) ? v : b);
+  return Math.abs(x - p.x) < Math.abs(y - p.y) ? {x, y:clamp(p.y, Math.min(...hs()), Math.max(...hs()))} : {x:clamp(p.x, VS[0], VS[VS.length - 1]), y};
+}
+function patrolTick(P, dt) {
+  // the hunt
+  if (P.chase && (P.chase.gone || !thieves.includes(P.chase))) { P.chase = null; if (P.round) { P.path = [...route(onStreet(P), P.round[0]), ...P.round.slice(1)]; P.round = null; } }
+  if (!P.chase && S.phase === "night") { const t = thieves.filter(t => !t.gone).sort((a, b) => dist(a, P) - dist(b, P))[0]; if (t) { P.chase = t; P.round = P.path.length ? P.path : [{x:DEPOT.x, y:DEPOT.y}]; P.reT = 0; } }
+  if (P.chase) {
+    const t = P.chase;
+    if (dist(t, P) < PATROL_CATCH) { flashes.push({x:t.x, y:t.y, t:0}); catchThief(t, "patrol"); return; }
+    P.reT -= dt; if (P.reT <= 0) { P.reT = .8; P.path = route(onStreet(P), onStreet(t)); if (MAP || dist(onStreet(t), t) > 2) P.path.push({x:t.x, y:t.y}); }   // he keeps moving: look again every moment
+  }
+  // the driving
+  let st = PATROL.speed * dt;
+  while (st > 0 && P.path.length) {
+    const q = P.path[0], dx = q.x - P.x, dy = q.y - P.y, d = Math.hypot(dx, dy);
+    if (d < .5) { P.x = q.x; P.y = q.y; P.path.shift(); continue; }
+    const dd = wrapA(Math.atan2(dy, dx) - P.ang);
+    P.ang = wrapA(P.ang + Math.sign(dd) * Math.min(Math.abs(dd), PATROL_TURN * dt));
+    let f = Math.abs(dd) > 1.2 ? .08 : Math.max(.35, Math.cos(dd));   // a sharp turn: almost stop and turn first
+    const n = P.path[1]; if (n && d < 40) { const c = Math.abs(wrapA(Math.atan2(n.y - q.y, n.x - q.x) - Math.atan2(dy, dx))); f *= 1 - .55 * Math.min(1, c / 1.6) * (1 - d / 40); }   // brake before a corner
+    const m = Math.min(d, st * f); P.x += dx / d * m; P.y += dy / d * m;
+    if (m >= d - .01) { P.x = q.x; P.y = q.y; P.path.shift(); }
+    break;
+  }
+  if (P.chase && !P.path.length) P.reT = 0;
 }
 function placeReflector(p) {
   if (S.phase !== "night") { msg(Tx("Reflektori rade samo noću. Postavi ih kad padne mrak."), true); return; }
@@ -2213,14 +2247,10 @@ function step(dt) {
       }
     }
   }
+  if (S.patrol) patrolTick(S.patrol, dt);
   if (S.patrol) {
-    const P = S.patrol; let st = PATROL.speed * dt;
-    while (st > 0 && P.path.length) {
-      const q = P.path[0], dx = q.x - P.x, dy = q.y - P.y, d = Math.hypot(dx, dy);
-      if (d > .01) P.ang = Math.atan2(dy, dx);
-      if (d <= st) { P.x = q.x; P.y = q.y; P.path.shift(); st -= d; } else { P.x += dx / d * st; P.y += dy / d * st; st = 0; }
-    }
-    if (!P.path.length) { S.patrol = null; S.calm = PATROL.calm; for (const h of hoods) scare(h, true); banner(Tx("Kvart je miran"), Tx`Patrola je završila krug. Huligani ne dolaze ${PATROL.calm} sekundi.`); }
+    const P = S.patrol;
+    if (!P.path.length && !P.chase) { S.patrol = null; S.calm = PATROL.calm; for (const h of hoods) scare(h, true); banner(Tx("Kvart je miran"), Tx`Patrola je završila krug. Huligani ne dolaze ${PATROL.calm} sekundi.`); }
   }
   if (S.calm > 0) S.calm = Math.max(0, S.calm - dt);
   const G = S.gang;
@@ -2883,7 +2913,7 @@ function catchThief(t, how) {
   t.gone = true; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
   S.money += prize; S.led.bounty += THIEF.reward; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
   burst(t.x, t.y, "#f1c453", 16, 80); float(t.x, t.y - 14, Tx`Lopov uhvaćen! +${prize} $`, "#7ed39a", true);
-  msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
+  msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : how === "patrol" ? Tx`Patrola je uhvatila lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
 }
 function updateThief(t, dt) {
   t.bob += dt * 10;
