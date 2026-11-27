@@ -329,16 +329,21 @@ function drawLandmarks() {
   }
   ctx.restore();
 }
+const LAMP_CURB = 9;   // a street lamp on a real map stands at least this far from the asphalt, like the lamps the map starts with
+function curbFix(s) {   // a lamp saved by an older version too close to the road moves back onto the sidewalk
+  if (!MAP || s.axis !== "s" || !MSEG[s.sg]) return; const g = MSEG[s.sg], o = segD(s.x, s.y, g);
+  if (o.d < g.w / 2 + LAMP_CURB) { const q = segPt(g, o.t, (g.w / 2 + LAMP_CURB) * (s.side || o.side)); if (!inBld(q.x, q.y, 0)) setSlotPos(s, q.x, q.y); }
+}
 function mapPosOk(self, x, y, c) {
   const ax = c ? c.axis : self && self.axis;
   if (x < 10 || x > W - 10 || y < 10 || y > H - 10) return false;
-  if (ax === "xy") { if (!inParkMap(x, y)) return false; } else if (ax === "yd") { if (!yardOk(x, y)) return false; } else if (onRoad(x, y, 2) || inBld(x, y, 0)) return false;
+  if (ax === "xy") { if (!inParkMap(x, y)) return false; } else if (ax === "yd") { if (!yardOk(x, y)) return false; } else if (onRoad(x, y, LAMP_CURB - 3) || inBld(x, y, 0)) return false;   // the pole stands on the sidewalk, clear of the drawn kerb (asphalt + 3 on each side)
   for (const o of slots) if (o !== self && o !== tmp && (o.lamp || o.job) && avail(o) && Math.hypot(o.x - x, o.y - y) < 34) return false;
   return true;
 }
 function freeSpotMap(p) {
   const cands = [];
-  MSEG.forEach((g, i) => { if (g.cl < 1) return; const o = segD(p.x, p.y, g); if (o.d > 60 || o.t < 6 || o.t > g.len - 6) return; const lat = cl2(o.d, g.w / 2 + 5, g.w / 2 + 17), q = segPt(g, o.t, lat * o.side);
+  MSEG.forEach((g, i) => { if (g.cl < 1) return; const o = segD(p.x, p.y, g); if (o.d > 60 || o.t < 6 || o.t > g.len - 6) return; const lat = cl2(o.d, g.w / 2 + LAMP_CURB, g.w / 2 + 19), q = segPt(g, o.t, lat * o.side);
     cands.push({x:q.x, y:q.y, rx:o.x, ry:o.y, axis:"s", sg:i, side:o.side}); });
   if (inParkMap(p.x, p.y)) { const r = mproj(p); if (r) cands.push({x:p.x, y:p.y, rx:r.x, ry:r.y, axis:"xy"}); }
   cands.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
@@ -347,7 +352,7 @@ function freeSpotMap(p) {
 function moveSlotMap(s, px, py) {
   let x, y;
   if (s.axis === "xy" || s.axis === "yd") { x = px; y = py; }
-  else { const g = MSEG[s.sg], b = segD(s.bx, s.by, g), o = segD(px, py, g), t = cl2(o.t, Math.max(4, b.t - 45), Math.min(g.len - 4, b.t + 45)), lat = cl2(o.d * (o.side === s.side ? 1 : 0), g.w / 2 + 3, g.w / 2 + 23), q = segPt(g, t, lat * s.side); x = q.x; y = q.y; }
+  else { const g = MSEG[s.sg], b = segD(s.bx, s.by, g), o = segD(px, py, g), t = cl2(o.t, Math.max(4, b.t - 45), Math.min(g.len - 4, b.t + 45)), lat = cl2(o.d * (o.side === s.side ? 1 : 0), g.w / 2 + LAMP_CURB, g.w / 2 + 23), q = segPt(g, t, lat * s.side); x = q.x; y = q.y; }
   if (mapPosOk(s, x, y)) { const moved = Math.abs(x - s.x) > .01 || Math.abs(y - s.y) > .01; setSlotPos(s, x, y); return moved; }
   return false;
 }
@@ -602,7 +607,7 @@ function load(d) {
     resetGame(); Object.assign(S, d.S);
     for (const s of slots) { s.lamp = null; s.job = null; }
     for (const c of d.dyn || []) slots.push(makeSlot(c));
-    for (const l of d.lamps || []) { const s = slots[l.id]; if (s && l.x != null) setSlotPos(s, l.x, l.y); const m = modelFrom(l.m); if (s && m) s.lamp = {m, life:l.life, hp:l.hp, state:l.state, order:l.order, powered:false, sensor:!!l.sensor, glass:!!l.glass}; }
+    for (const l of d.lamps || []) { const s = slots[l.id]; if (s && l.x != null) { setSlotPos(s, l.x, l.y); curbFix(s); } const m = modelFrom(l.m); if (s && m) s.lamp = {m, life:l.life, hp:l.hp, state:l.state, order:l.order, powered:false, sensor:!!l.sensor, glass:!!l.glass}; }
     vans = []; for (let i = 0; i < Math.max(1, Math.min(4, d.vans || 1)); i++) addVan();
     for (const j of d.jobs || []) { const s = slots[j.id], m = modelFrom(j.m); if (s && m && (j.type === "install" || s.lamp)) { const jj = {slot:s, type:j.type, m, wb:j.wb || (d.v === 2 && j.type === "repair"), assigned:false}; s.job = jj; jobs.push(jj); } }
     S.gang = Object.assign({presence:60, rage:0, gone:false, lv:1, back:0}, S.gang); S.led = Object.assign({pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, S.led); if (!BULBS[S.bulb]) S.bulb = "ob";
@@ -2454,8 +2459,13 @@ function seats() {
   if (SEATS) return SEATS; SEATS = [];
   if (!MAP) { const [px, py, pw, ph] = PARK; for (const [fx, fy] of [[.22, .2], [.78, .26], [.2, .8], [.74, .78]]) SEATS.push({x:px + pw * fx, y:py + ph * fy, kind:"bench"}); }
   else { const pk = PARKS.slice().sort((a, b) => (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0))[0]; if (pk) { let n = 0; for (let i = 0; i < 60 && n < 4; i++) { const x = pk.x0 + (pk.x1 - pk.x0) * ((i * .618) % 1), y = pk.y0 + (pk.y1 - pk.y0) * ((i * .377 + .2) % 1); if (ptIn(x, y, pk.f) && !onRoad(x, y, 10) && x > 10 && x < W - 10 && y > 10 && y < H - 10) { SEATS.push({x, y, kind:"bench"}); n++; } } } }
-  const k = SPOTS.find(o => o.id === "kiosk"); if (k) for (const [dx, dy] of [[-22, 18], [0, 24], [22, 18]]) SEATS.push({x:k.x + dx, y:k.y + dy, kind:"cafe", cen:true});   // a small café garden by the kiosk
-  if (!MAP) { const r = ZONES2.cen.r; for (const [fx, fy] of [[.3, .93], [.5, .95], [.7, .93]]) SEATS.push({x:r[0] + r[2] * fx, y:r[1] + r[3] * fy, kind:"cafe", zone:"cen"}); }
+  // café tables never stand on the road or in a building: each one moves to the nearest free spot of sidewalk or yard
+  const road = (x, y, p) => MAP ? onRoad(x, y, p) : VS.some(v => Math.abs(x - v) < ST / 2 + p) || HS_ALL.some(h => Math.abs(y - h) < ST / 2 + p);
+  const inHouse = (x, y, p) => houses.some(h => x > h.x - p && x < h.x + h.w + p && y > h.y - p && y < h.y + h.h + p) || (MAP && inBld(x, y, 0));
+  const free = (x, y, k) => x > 8 && x < W - 8 && y > 8 && y < boundY() - 8 && !road(x, y, 3) && !inHouse(x, y, 2) && !(k && Math.hypot(x - k.x, y - k.y) < 13) && !SEATS.some(o => Math.hypot(o.x - x, o.y - y) < 15);
+  const place = (x, y, k) => { for (let r = 0; r <= 90; r += 3) for (let a = 0; a < 16; a++) { const q = {x:x + Math.cos(a / 16 * 6.283) * r, y:y + Math.sin(a / 16 * 6.283) * r}; if (free(q.x, q.y, k)) return q; if (!r) break; } return null; };
+  const k = SPOTS.find(o => o.id === "kiosk"); if (k) for (const [dx, dy] of [[-22, 18], [0, 24], [22, 18]]) { const q = place(k.x + dx, k.y + dy, k); if (q) SEATS.push({x:q.x, y:q.y, kind:"cafe", cen:true}); }   // a small café garden by the kiosk
+  if (!MAP) { const r = ZONES2.cen.r; for (const [fx, fy] of [[.3, .93], [.5, .95], [.7, .93]]) { const q = place(r[0] + r[2] * fx, r[1] + r[3] * fy); if (q) SEATS.push({x:q.x, y:q.y, kind:"cafe", zone:"cen"}); } }
   return SEATS;
 }
 function drawSeats() {
@@ -3504,6 +3514,32 @@ function drawReq() {
   uprightAt(ctx, R.x, R.y, () => { ctx.fillStyle = "rgba(8,10,20,.85)"; ctx.beginPath(); ctx.roundRect(R.x - w / 2, R.y - 52, w, 20, 10); ctx.fill(); ctx.fillStyle = `rgb(${col})`; ctx.fillText("🏠 " + t, R.x, R.y - 37.5); });
   ctx.restore();
 }
+// ---------- Tips when they are needed: one sentence, the first time the player meets something, once per device ----------
+const HINT_KEY = "lightThemUp.hints";
+const HINTS = (() => { try { return JSON.parse(localStorage.getItem(HINT_KEY) || "{}") || {}; } catch (e) { return {}; } })();
+const tonesMixed = () => [MAP ? DIST0 : "novi", S.unlocked && !MAP ? "stari" : null].filter(Boolean).some(d => districtTone(d).tones.size > 1);
+const HINT_LIST = [   // [key, when, sentence]; the first one whose moment has come is shown
+  ["broken", () => slots.some(s => s.lamp && s.lamp.state === "broken" && !s.job), Tx("Razbijenu lampu (crveni X) dodirni i servis kreće da je popravi.")],
+  ["mood", () => S.moodSad > 0, Tx("Tužno lice iznad lampe znači da stanarima ta svetiljka ne odgovara: park voli fenjer, a stari kvart toplo svetlo.")],
+  ["power", () => S.load > .8, Tx("Generator napaja ograničen broj lampi, pa kad se Struja napuni, kupi jači generator u Prodavnici.")],
+  ["tone", () => tonesMixed(), Tx("Kad su sve lampe u kvartu iste boje, sve tople ili sve hladne, stanari plaćaju 25% više.")],
+  ["day", () => S.phase === "day", Tx("Danju se ne zarađuje, ali su sve popravke upola jeftinije.")],
+  ["cover", () => S.cover >= .45, Tx("Što je veći deo kvarta osvetljen, stanari više plaćaju, a cilj je 100%.")],
+  ["shop", () => S.money >= 220, Tx("Imaš para za Prodavnicu: tamo su jači generator, još kombija i nove zone.")],
+  ["zones", () => !MAP && S.night >= 3 && S.money >= 350, Tx("Šetalište voli toplo svetlo, a Industrija belu LED, i obe plaćaju više: kupuješ ih u Prodavnici.")],
+];
+let hintT = 3;
+function hintTick(dt) {
+  if (!S.started || S.paused || tut || !ov.hidden || !$("dawn").hidden) return;
+  hintT -= dt; if (hintT > 0) return; hintT = 1;
+  if (S.banner && performance.now() - S.banner.t0 < 6000) return;   // one card at a time
+  for (const [k, when, text] of HINT_LIST) {
+    if (HINTS[k]) continue; let go = false; try { go = when(); } catch (e) {}
+    if (!go) continue;
+    HINTS[k] = 1; try { localStorage.setItem(HINT_KEY, JSON.stringify(HINTS)); } catch (e) {}
+    banner(Tx("Savet"), text); hintT = 8; return;
+  }
+}
 // ---------- First-minute tutorial: only once, only for a new game ----------
 const TUT_KEY = "lightThemUp.tutDone3";   // new guided tutorial: shown once more to everyone
 const tutCount = () => slots.filter(s => s.lamp).length + jobs.filter(j => j.type === "install").length;
@@ -3521,28 +3557,10 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
   {el:"tool-kl", t:Tx("Izaberi svetiljku"), s:Tx("Dodirni Klasični stub u donjoj traci. Ruka pokazuje gde."), act:true, done:() => !!FIXTURES[S.tool]},
   {el:"cv", t:Tx("Postavi lampu"), s:Tx("Dodirni mesto koje pokazuje ruka."), act:true, spot:() => { const m = toolModel(); if (!m) return null; if (!tut.spot) { const b = bestSpot(m); tut.spot = b ? {x:b.x, y:b.y} : null; } return tut.spot; }, done:() => !!S.pending || jobs.some(j => j.type === "install")},
   {el:"cv", t:Tx("Pogledaj krug"), s:Tx("Krug pokazuje dokle će lampa svetleti. Dodirni isto mesto još jednom ili dugme Postavi."), act:true, spot:() => S.pending ? {x:S.pending.x, y:S.pending.y} : tut.spot, done:() => jobs.some(j => j.type === "install")},
-  tutLamp(Tx("Druga lampa"), Tx("Postavi još jednu lampu tamo gde pokazuje ruka. Svaka nova lampa osvetli još jedan deo kvarta, pa stanari plaćaju više."), "kl"),
-  tutLamp(Tx("Treća lampa"), Tx("I treću. Krug koji se ne preklapa sa drugima donosi najviše novog svetla."), "kl", false),
-  tutLamp(Tx("Fenjer u parku"), Tx("Sad fenjer, u parku. Park voli fenjer, a ulici treba jača lampa. Lice iznad lampe pokazuje da li se stanarima sviđa."), "fe", true),
   {el:"cv", t:Tx("Servis radi"), s:Tx("Servisni kombi vozi do lampi i montira ih. Sačekaj da stigne."), act:true, run:true, spot:() => { const j = jobs.find(j => j.type === "install"); return j && j.slot ? {x:j.slot.x, y:j.slot.y} : null; }, done:() => tut.t > 60 || !jobs.some(j => j.type === "install")},
-  {el:"hCover", t:Tx("Prihod raste"), s:Tx("Vidiš? Svetlo je poraslo. Što je veći deo kvarta osvetljen, stanari više plaćaju i prihod raste."), wait:5},
-  {el:"cv", t:Tx("Boja svetla"), s:Tx("Gore levo piše kakvo svetlo ima kvart. Kad su sve lampe iste boje, sve tople (žute) ili sve hladne (bele), stanari plaćaju 25% više. Kvart sa zgradama voli belu LED, a stari kvart sa kućama toplu žutu."), enter:() => { if (S.tool) setTool(null); }, scr:() => { const uk = badgeK(); return {x:70 * uk, y:19 * uk}; }},
-  {el:"hPow", t:Tx("Struja"), s:Tx("Generator može da napaja ograničen broj lampi. Kad se brojke izjednače, kupi jači generator u Prodavnici.")},
-  {el:"cv", t:Tx("Pokvarena lampa"), s:Tx("Huligani su razbili lampu: vidiš crveni X. Dodirni je i servis kreće da je popravi."), act:true,
-    enter:() => { const s0 = slots.find(s => s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; s0.lamp.state = "broken"; tut.br = s0; S.money = Math.max(S.money, 60); },
-    spot:() => tut.br ? {x:tut.br.x, y:tut.br.y} : null, done:() => !!tut.br.job},
-  {el:"cv", t:Tx("Popravka"), s:Tx("Kombi vozi do lampe i popravlja je. Danju su popravke upola jeftinije. Izgorela sijalica se menja sama, bez novog stuba."), act:true, run:true,
-    spot:() => tut.br ? {x:tut.br.x, y:tut.br.y} : null, done:() => tut.t > 60 || (!tut.br.job && tut.br.lamp && tut.br.lamp.state === "ok")},
   {el:"cv", t:Tx("Zameni sijalicu"), s:Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba."), act:true,
     enter:() => { const s0 = slots.find(s => s !== tut.br && s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; if (S.tool) setTool(null); s0.lamp.life = 0; s0.lamp.state = "burnt"; tut.bu = s0; S.money = Math.max(S.money, 60); },
     spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => !!tut.bu.job},
-  {el:"cv", t:Tx("Nezadovoljni stanari"), s:Tx("Tužno lice iznad lampe znači da stanarima ta lampa ne odgovara, pa plaćaju manje. Hajde da je zamenimo."), hand:"char",
-    enter:() => { for (const s of slots) { if (!s.lamp || s.lamp.state !== "ok" || s.job || !avail(s) || moodOf(s, s.lamp.m)[0] >= 0) continue;
-      const f = Object.keys(FIXTURES).find(f => moodOf(s, combo(f, "ob"))[0] > 0); if (f) { tut.rs = s; tut.rf = f; if (S.tool) setTool(null); return; } } return false; },
-    spot:() => ({x:tut.rs.x, y:tut.rs.y})},
-  {get el() { return "tool-" + (tut && tut.rf || "kl"); }, t:Tx("Izaberi pravu svetiljku"), s:Tx("Ruka pokazuje svetiljku koja se ovim stanarima sviđa. Izaberi je."), act:true, done:() => S.tool === tut.rf},
-  {el:"cv", t:Tx("Zameni lampu"), s:Tx("Sad dodirni tu lampu sa tužnim licem. Radar pokaže da li se stanarima sviđa, a drugi dodir naruči zamenu."), act:true,
-    enter:() => { S.money = Math.max(S.money, 60); }, spot:() => ({x:tut.rs.x, y:tut.rs.y}), done:() => !!tut.rs.job},
   {el:"cv", t:Tx("Dolazi huligan"), s:Tx("Gledaj levu ivicu: odatle iz bande dolazi huligan (crvene oči). Ide crvenim isprekidanim putevima i traži lampe da ih razbije kamenom."), run:true, hand:"watch",
     enter:() => { const h = spawnHood(); if (!h) return false; tut.h = h; S.flashCd = 0; },
     spot:() => tut.h && tut.h.state !== "flee" && hoods.includes(tut.h) ? {x:Math.max(12, tut.h.x), y:tut.h.y} : null, done:() => tut.t > 6 || tut.h.state === "flee" || !hoods.includes(tut.h)},
@@ -3550,16 +3568,7 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
     enter:() => { const h = tut.h; if (!h || h.state === "flee" || !hoods.includes(h)) return false; S.flashCd = 0;
       if (h.x < 30 || h.x > W - 30 || h.y < 30 || h.y > boundY() - 30) { const k = h.path.findIndex((q, i) => i >= h.i && q.x > 40 && q.x < W - 40 && q.y > 40 && q.y < boundY() - 40); if (k >= 0) { h.i = k; h.x = h.path[k].x; h.y = h.path[k].y; } } },
     spot:() => tut.h && tut.h.state !== "flee" ? {x:tut.h.x, y:tut.h.y} : null, done:() => tut.h.state === "flee" || !hoods.includes(tut.h)},
-  {el:"cv", t:Tx("Dolazi lopov"), s:Tx("Gledaj: sa ivice kvarta ulazi lopov (žute oči). Ide ka mračnom stanu ili kolima da ih opljačka. Svetlo ga hvata."), run:true, hand:"watch",
-    enter:() => { S.tips.thief = 1; const n = thieves.length; for (let k = 0; k < 20 && thieves.length === n; k++) spawnThief(); if (thieves.length === n) return false; tut.th = thieves[thieves.length - 1]; },
-    spot:() => tut.th && !tut.th.gone ? {x:clamp(tut.th.x, 12, W - 12), y:clamp(tut.th.y, 12, boundY() - 12)} : null, done:() => tut.t > 6 || tut.th.gone || tut.th.state !== "go"},
-  {el:"cv", t:Tx("Uhvati lopova"), s:Tx("Dodirni ga da ga uhvatiš. Nagrada je 20 $."), act:true, hand:"char",
-    enter:() => { const t = tut.th; if (!t || t.gone || !thieves.includes(t)) return false; t.x = clamp(t.x, 24, W - 24); t.y = clamp(t.y, 24, boundY() - 24); },
-    spot:() => tut.th && !tut.th.gone ? {x:tut.th.x, y:tut.th.y} : null, done:() => tut.th.gone || !thieves.includes(tut.th)},
-  {el:"cv", t:Tx("Šetalište"), s:Tx("Šetalište kupuješ u Prodavnici. Donosi 40% više novca ako je uvek osvetljeno toplim svetlom: fenjeri i klasični stubovi."), enter:() => { if (MAP) return false; }, spot:() => ({x:ZONES2.cen.r[0] + ZONES2.cen.r[2] / 2, y:ZONES2.cen.r[1] + ZONES2.cen.r[3] / 2})},
-  {el:"cv", t:Tx("Industrija"), s:Tx("Industrijska zona plaća 60% više, ali samo uz belu LED svetlost (Ulična LED). Tamo ne stavljaj žute lampe."), enter:() => { if (MAP) return false; }, spot:() => ({x:ZONES2.ind.r[0] + ZONES2.ind.r[2] / 2, y:ZONES2.ind.r[1] + ZONES2.ind.r[3] / 2})},
-  {el:"gang", t:Tx("Banda"), s:Tx("Od 2. noći dolaze huligani i lome lampe. Dodirni huligana da ga oteraš baterijom. Svetle ulice ih teraju.")},
-  {el:"btnShop2", t:Tx("Prodavnica"), s:Tx("Ovde kupuješ jači generator, još kombija i nove zone. To je sve, srećno!"), last:true},
+  {el:"cv", t:Tx("Prva noć je tvoja"), s:Tx("To je sve! Ostalo učiš usput: kad nešto novo zatreba, iskoči kratak savet."), last:true},
 ];
 let tut = null;
 function tutStart(force) { try { if (!force && localStorage.getItem(TUT_KEY)) return; } catch (e) { return; } tut = {i:0, t:0}; document.body.classList.add("tut-on"); tutShow(); }
@@ -3597,7 +3606,7 @@ function frame(now) {
   const dt = Math.min(.15, (now - last) / 1000); last = now;   // a slow frame no longer slows the game down: it runs in steps of at most 50 ms
   const hold = S.paused || (tut && !TUT[tut.i].wait && !TUT[tut.i].run);   // the game stands still while the tutorial explains
   if (hold) step(0); else for (let r = dt; r > 1e-6; r -= .05) step(Math.min(.05, r));
-  tutTick(dt); dailyTick(dt); achTick(dt); if (!hold) { mgrTick(dt); reqTick(dt); }
+  tutTick(dt); hintTick(dt); dailyTick(dt); achTick(dt); if (!hold) { mgrTick(dt); reqTick(dt); }
   ambT -= dt; if (ambT <= 0) { AMB.update(.2 - ambT); ambT = .2; }
   autoT -= dt; if (autoT <= 0) { autoT = 15; if (S.started && !hold) save(); }   // autosave every 15 s of play
   render();
