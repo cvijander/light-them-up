@@ -836,6 +836,12 @@ const wearLv = L => { const p = Math.ceil(L.life * 100); return L.state === "bur
 const WEAR_F = [1, .8, 1.25, 1.5, 2], WEAR_COL = ["#9fe0b3", "#f1c453", "#ff9f43", "#ff6b5b", "#ff6b5b"];
 const wearName = lv => [Tx("dobra"), Tx("pazi, uskoro zamena"), Tx("zameni je"), Tx("hitna zamena"), Tx("izgorela")][lv];
 const swapCost = (L, m = L.m) => Math.ceil(bulbCost(m) * WEAR_F[wearLv(L)]);   // what a new bulb costs right now for this lamp
+function swapNote(L, m = L.m) {   // how a bulb swap price is made up, so 60 $ for a 40 $ bulb is never a surprise; "" when it is just the bulb
+  const lv = wearLv(L), b = bulbCost(m), x = swapCost(L, m) - b;
+  if (!x) return "";
+  return lv === 1 ? Tx`sijalica ${b} $, ${-x} $ popusta jer je menjaš na vreme` : lv === 2 ? Tx`sijalica ${b} $ + ${x} $ doplata za kasnu zamenu (ispod 20%)`
+    : lv === 3 ? Tx`sijalica ${b} $ + ${x} $ doplata za hitnu zamenu (ispod 15%)` : Tx`sijalica ${b} $ + ${x} $ doplata jer je izgorela`;
+}
 // Which bulb the service crew puts in when it replaces one (shop setting S.svcBulb). "auto": the same bulb, but a saver one while the generator is over 85%.
 const SVC_OPTS = ["auto", "same", "st", "led", "ob", "ja"];
 const svcName = id => id === "auto" ? Tx("Pametno") : id === "same" ? Tx("Ista kao pre") : BULBS[id].name;
@@ -938,12 +944,13 @@ function route(P, Q) {
 // ---------- Actions ----------
 function order(s, type, m, cost) {
   if (S.money < cost) { msg(Tx`Nemaš dovoljno novca. Treba ${cost} $.`, true);SFX.err(); float(s.x, s.y - 14, Tx("Fali novca"), "#ff6b5b"); return; }
+  const note = type === "bulb" && s.lamp ? swapNote(s.lamp, m) : "";   // read before the job starts, while the old bulb is still in
   S.money -= cost; S.led.buy += cost; if (s === tmp) tmp = null;
   const j = {slot:s, type, m, assigned:false, wb:type === "repair" && s.lamp && s.lamp.life <= .05}; s.job = j; jobs.push(j);
   float(s.x, s.y - 14, `−${cost} $`, "#ff9d8f");
   const [mood, why] = moodOf(s, m);
   const full = type === "install" && !s.lamp && m.power > genCap() * OVER_MAX - S.used;
-  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).` : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
+  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? (note ? Tx`Servis menja sijalicu: ${m.b.name}, ${cost} $ = ${note}.` : Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).`) : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
   save();
   SFX.buy();
   return j;
@@ -1030,16 +1037,28 @@ function slotAt(p, rad) {
 }
 function toWorld(e) { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return unproj(c.u / cssW * pw / VZ + VX, c.v / cssW * pw / VZ + VY); }
 const hitR = () => Math.max(22, 16 * W / cssW) / VZ;
+// Thieves and hooligans are drawn standing up, about 19 units tall (times figK), so a tap on the body or the head must count, not only on the feet.
+const figK = () => Math.max(1.5, 22 / (20 * pxPerU()));
+function figDist(o, p) {   // distance from p to the figure: the line from its feet up to its head, in map units
+  const h = 19 * figK(), vx = UPV.x * h, vy = UPV.y * h, t = clamp(((p.x - o.x) * vx + (p.y - o.y) * vy) / (vx * vx + vy * vy), 0, 1);
+  return Math.hypot(o.x + vx * t - p.x, o.y + vy * t - p.y);
+}
+// Which thief or hooligan a tap hits. They come before lamps: on a phone the hit area is bigger, because a finger is wide and they move.
+function figAt(p, touch) {
+  const r = Math.max(hitR() * 1.1, 7 * figK()) * (touch ? 1.5 : 1);
+  let best = null, bd = r;
+  for (const t of thieves) if (!t.gone) { const d = figDist(t, p); if (d < bd) { bd = d; best = {th:t}; } }
+  for (const h of hoods) if (h.state !== "flee") { const d = figDist(h, p) + 2; if (d < bd) { bd = d; best = {h}; } }   // a thief wins a tie: he is worth more
+  return best;
+}
 
 cv.addEventListener("pointerdown", e => {
   e.preventDefault();
   const p = toWorld(e); if (e.pointerType === "mouse") S.hover = p;
   if (S.paused) return;
-  const R = hitR();
-  const th = thieves.slice().sort((a, b) => dist(a, p) - dist(b, p))[0];
-  if (th && dist(th, p) < R * 1.1) { catchThief(th, "tap"); flashes.push({x:th.x, y:th.y, t:0}); return; }
-  const h = hoods.filter(h => h.state !== "flee").sort((a, b) => dist(a, p) - dist(b, p))[0];
-  if (h && dist(h, p) < R * 1.1) {
+  const R = hitR(), fig = figAt(p, e.pointerType !== "mouse"), th = fig && fig.th, h = fig && fig.h;
+  if (th) { catchThief(th, "tap"); flashes.push({x:th.x, y:th.y, t:0}); return; }
+  if (h) {
     if (S.flashCd > 0) { msg(Tx("Baterijska lampa se puni…")); return; }
     scare(h); S.flashCd = 1.5; S.money += 5; SFX.coin(); S.led.bounty += 5; flashes.push({x:h.x, y:h.y, t:0});
     recInc("hoods"); float(h.x, h.y - 14, Tx("Oteran! +5 $"), "#7ed39a", true); msg(Tx("Oterao si huligana baterijom! +5 $")); return;
@@ -2004,7 +2023,7 @@ function updateUI() {
   else if (s2 && s2.lamp) {
     const L = s2.lamp, [mood, why] = moodOf(s2, L.m);
     const st = s2.job ? Tx("servis je na putu") : L.state === "broken" ? Tx`razbijena svetiljka, dodir = popravka ${fixCost(L)} $` : L.state === "burnt" ? Tx`izgorela sijalica, dodir = nova ${svcModel(L).b.name} za ${fixCost(L)} $ (duplo, jer je izgorela)` : !L.powered ? Tx("bez struje, generator je pun") : wearLv(L) ? Tx`radi, ${wearName(wearLv(L))}: dodir = nova ${svcModel(L).b.name} za ${fixCost(L)} $` : Tx("radi");
-    html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`; if (mgrHas(s2)) html += "<br>" + Tx`Ovaj deo održava majstor (${mgrName(mgrArea(s2))}).`;
+    html = Tx`<b>${L.m.name}</b> · ${Math.ceil(L.life * 100)}% veka<br>Stanje: ${st}<br>Stanari: ${mood > 0 ? "srećni" : mood < 0 ? "nesrećni" : "ravnodušni"}. ${why}`; if (!s2.job && L.state !== "broken" && swapNote(L, svcModel(L))) html += "<br>" + Tx`Cena: ${swapNote(L, svcModel(L))}.`; if (mgrHas(s2)) html += "<br>" + Tx`Ovaj deo održava majstor (${mgrName(mgrArea(s2))}).`;
   } else if (s2) html = Tx`<b>${s2.zone === "park" ? Tx("Mesto u parku") : s2.district === "stari" ? Tx("Mesto u starom kvartu") : Tx("Prazno mesto na ulici")}</b><br>${toolModel() ? Tx`Dodir = radar, drugi dodir = montaža (${toolModel().name}, ${toolModel().cost} $)` : Tx("Izaberi svetiljku, pa dodirni ovde.")}`;
   else { const L = S.led, r = v => Math.round(v);
     html = Tx`<b>Novac od prošle zore</b><br>Stanari +${r(L.pay)} $ · nagrade +${r(L.bounty)} $ · struja −${r(L.fuel)} $ · kupovina i popravke −${r(L.buy)} $${L.theft ? Tx` · lopovi −${r(L.theft)} $` : ""}` +
@@ -3504,6 +3523,7 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
   // In Borča a touch is held back until the finger lifts: a short tap acts like before, any drag only moves the map.
   // Only a touch right on the lamp you are placing goes through at once, so that lamp can still be dragged.
   const nearPending = e => { const pd = S.pending; if (!pd || pd.lamp || pd.job) return false; const p = toWorld(e); return Math.hypot(pd.x - p.x, pd.y - p.y) < hitR() * 1.6; };
+  const onFigure = e => !S.paused && !!figAt(toWorld(e), e.pointerType !== "mouse");   // a thief or hooligan under the finger: catch him at once, he will not wait for the finger to lift
   const fire = (type, d) => { replay = true; try { cv.dispatchEvent(new PointerEvent(type, {clientX:d.x, clientY:d.y, pointerId:d.id, pointerType:d.type, isPrimary:true, bubbles:true, cancelable:true})); } finally { replay = false; } };
   const unit = e => { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return {x:c.u / cssW * pw, y:c.v / cssW * pw}; };
   stage.addEventListener("pointerdown", e => {   // a tap on the banner closes it (and does nothing else); any other tap also closes it
@@ -3513,7 +3533,7 @@ function zoomAt(z, ux, uy) { const wx = ux / VZ + VX, wy = uy / VZ + VY, nz = cl
   stage.addEventListener("pointerdown", e => {
     if (e.target !== cv || replay) return;
     pts.set(e.pointerId, unit(e));
-    if (pts.size === 1 && (e.pointerType !== "mouse" || canPan()) && (MAP || canPan()) && !nearPending(e)) { defer = {x:e.clientX, y:e.clientY, id:e.pointerId, type:e.pointerType}; e.stopPropagation(); e.preventDefault(); }
+    if (pts.size === 1 && (e.pointerType !== "mouse" || canPan()) && (MAP || canPan()) && !nearPending(e) && !onFigure(e)) { defer = {x:e.clientX, y:e.clientY, id:e.pointerId, type:e.pointerType}; e.stopPropagation(); e.preventDefault(); }
     if (pts.size === 2) {   // second finger: stop whatever the first one started and zoom instead
       cv.dispatchEvent(new Event("pointercancel")); defer = null;
       const [a, b] = [...pts.values()]; pinch = {d:Math.hypot(a.x - b.x, a.y - b.y) || 1, z:VZ, wx:(a.x + b.x) / 2 / VZ + VX, wy:(a.y + b.y) / 2 / VZ + VY}; pan = null;
