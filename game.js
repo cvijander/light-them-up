@@ -2291,11 +2291,11 @@ function vBox(x, y, c, s, a0, a1, w, z0, z1, col, opt = {}) {
   for (let i = 0; i < 4; i++) {
     const n = N[i], vis = n.x * VDN.x + n.y * VDN.y; if (vis <= .02) continue;
     const lit = n.x * LDN.x + n.y * LDN.y, [p, q] = E[i], pts = [lo[p], lo[q], hi[q], hi[p]];
-    ctx.fillStyle = shade(col, .62 + .26 * lit); ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.closePath(); ctx.fill();
+    if (!opt.ghost) { ctx.fillStyle = shade(col, .62 + .26 * lit); ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.closePath(); ctx.fill(); }
     if (opt.face) opt.face(i, pts, vis);
   }
-  ctx.fillStyle = opt.roof || shade(col, 1.12); ctx.beginPath(); ctx.moveTo(hi[0].x, hi[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(hi[k].x, hi[k].y); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = .7; ctx.stroke();   // light top edge: shows the shape on a dark street
+  if (!opt.ghost) { ctx.fillStyle = opt.roof || shade(col, 1.12); ctx.beginPath(); ctx.moveTo(hi[0].x, hi[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(hi[k].x, hi[k].y); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = .7; ctx.stroke(); }   // light top edge: shows the shape on a dark street (ghost: only the details on the walls, the body is drawn round elsewhere)
   if (opt.top) opt.top(hi, P);
 }
 const quadAt = (pts, u0, u1, v0, v1) => { const L = (A, B, t) => ({x:A.x + (B.x - A.x) * t, y:A.y + (B.y - A.y) * t});   // a part of a wall: u along the bottom edge, v up the wall
@@ -2304,7 +2304,7 @@ const quadAt = (pts, u0, u1, v0, v1) => { const L = (A, B, t) => ({x:A.x + (B.x 
 const fillQ = (q, f) => { ctx.fillStyle = f; ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let k = 1; k < 4; k++) ctx.lineTo(q[k].x, q[k].y); ctx.closePath(); ctx.fill(); };
 // A whole vehicle. kind: car, taxi, police, truck, van. o = the object (for smooth turning), lights: "off" | "on" | "brake".
 function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
-  const SZ = {truck:[15, 6.5], van:[14, 7], bus:[21, 6.6], small:[8.4, 4.7], wagon:[11, 5.1]}[kind] || [10, 5], L0 = SZ[0], W0 = SZ[1];
+  const SZ = {truck:[15, 6.5], van:S.crane ? [16, 7.6] : [14, 7], bus:[21, 6.6], small:[8.4, 4.7], wagon:[11, 5.1]}[kind] || [10, 5], L0 = SZ[0], W0 = SZ[1];
   const G = 1.3, k = G * Math.min(o && o.state === "home" ? 1 : 9, vSize(L0 * G)), L = L0 * k, Wd = W0 * k, a = o ? smoothAng(o, ang) : ang, c = Math.cos(a), s = Math.sin(a), Z = (ISO ? 1.35 : 1) * k;
   // layer 1: soft shadow on the road + wheels
   ctx.save(); ctx.translate(x + SHV.x * 3 * Z, y + SHV.y * 3 * Z); ctx.rotate(a); ctx.fillStyle = "rgba(0,0,0,.42)"; ctx.beginPath(); ctx.roundRect(-L - 1.5, -Wd - 1.5, 2 * L + 3, 2 * Wd + 3, 4 * k); ctx.fill(); ctx.restore();
@@ -2325,10 +2325,16 @@ function drawVehicle(o, x, y, ang, kind, col, lights, extra) {
     if (c * VDN.x + s * VDN.y > 0) { cargo(); cab(); } else { cab(); cargo(); }   // the nearer part last
     return;
   }
-  if (kind === "van") {
-    vBox(x, y, c, s, -L, L, Wd, 1.2 * Z, 6 * Z, col, {face:(i, pts, v) => { if (i === 1 || i === 3) { fillQ(quadAt(pts, .08, .92, .5, .78), "#f08a24"); fillQ(quadAt(pts, i === 1 ? .42 : .3, i === 1 ? .7 : .58, .05, .95), "rgba(0,0,0,.12)"); } lamps(i, pts, v); }});   // lower body with the orange stripe and the side door
-    vBox(x, y, c, s, -L, L * .78, Wd, 6 * Z, 10 * Z, col, {ti:0, tr:0, tw:.6 * k, face:(i, pts) => { if (i === 0) fillQ(quadAt(pts, .08, .92, .12, .9), glass); else if (i === 1 || i === 3) fillQ(quadAt(pts, i === 1 ? .72 : .08, i === 1 ? .92 : .28, .18, .85), glass); else fillQ(quadAt(pts, .15, .85, .2, .8), "rgba(0,0,0,.2)"); },
-      top:(hi, P) => extra && extra(P, 10 * Z, L, Wd, k)});   // tall box with dark glass; ladder, beacon, crane on the roof
+  if (kind === "van") {   // a modern rounded van: the body is stacked rounded slices (round nose and corners), the details sit on the walls
+    const vslab = (a0, a1, w, rr, z, fill) => { ctx.save(); ctx.translate(x + UPV.x * z, y + UPV.y * z); ctx.rotate(a); ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(a0, -w, a1 - a0, 2 * w, Math.min(rr, w, (a1 - a0) / 2)); ctx.fill(); ctx.restore(); };
+    const z0 = 1.2 * Z, z1 = 6 * Z, z2 = 10 * Z, rake = 2.6 * k, ppu = pxPerU();
+    const n1 = Math.max(3, Math.min(7, Math.ceil((z1 - z0) * ppu / 1.5))), n2 = Math.max(3, Math.min(7, Math.ceil((z2 - z1) * ppu / 1.5)));
+    for (let i = 0; i <= n1; i++) { const t = i / n1; vslab(-L, L, Wd - (1 - Math.sin(t * 3.14)) * .35 * k, 3.4 * k, z0 + (z1 - z0) * t, shade(col, i === 0 ? .42 : .6 + .28 * t)); }   // lower body, a little bulge
+    for (let i = 0; i <= n2; i++) { const t = i / n2; vslab(-L, L * .8 - t * rake, Wd - t * .7 * k, 3 * k - t * .6 * k, z1 + (z2 - z1) * t, i === n2 ? shade(col, 1.14) : shade(col, .66 + .26 * t)); }   // the tall box, nose raked back
+    { const m = {x:x + UPV.x * z2 - .2 * L * c, y:y + UPV.y * z2 - .2 * L * s}; ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.beginPath(); ctx.ellipse(m.x, m.y, L * .55, Wd * .32, a, 0, 6.28); ctx.fill(); }   // shine on the roof
+    vBox(x, y, c, s, -L, L, Wd, z0, z1, col, {ghost:true, face:(i, pts, v) => { if (i === 1 || i === 3) { fillQ(quadAt(pts, .12, .88, .5, .74), "#f08a24"); fillQ(quadAt(pts, i === 1 ? .42 : .3, i === 1 ? .7 : .58, .08, .95), "rgba(0,0,0,.12)"); } lamps(i, pts, v); }});   // orange stripe, side door, lights, wheels
+    vBox(x, y, c, s, -L, L * .8, Wd - .2 * k, z1, z2, col, {ghost:true, ti:rake, tr:0, tw:.7 * k, face:(i, pts) => { if (i === 0) fillQ(quadAt(pts, .2, .8, .1, .88), glass); else if (i === 1 || i === 3) fillQ(quadAt(pts, i === 1 ? .7 : .1, i === 1 ? .9 : .3, .15, .85), glass); else fillQ(quadAt(pts, .25, .75, .2, .8), "rgba(0,0,0,.2)"); },
+      top:(hi, P) => extra && extra(P, z2, L, Wd, k, (a0, a1, w, za, zb, cc, o) => vBox(x, y, c, s, a0, a1, w, za, zb, cc, o || {}))});   // windscreen and side windows; ladder, beacon, crane on the roof
     return;
   }
   if (kind === "bus") {   // city bus: long, a band of windows, big windscreen, two axles
@@ -3325,12 +3331,18 @@ function drawVan(v) {
     for (const sy of [-4, 4]) { ctx.beginPath(); ctx.moveTo(12, sy - 1.2); ctx.lineTo(52, sy * 2.6 - 7); ctx.lineTo(52, sy * 2.6 + 7); ctx.lineTo(12, sy + 1.2); ctx.closePath(); ctx.fill(); }
     ctx.restore(); }
   const busy = v.state === "drive" || v.state === "return" || v.state === "work";
-  drawVehicle(v, v.x, v.y, v.ang, "van", LOOK.van || (S.armor ? "#8b939e" : "#f1efe6"), S.phase === "night" && busy ? "on" : "off", (P, z, L, Wd, k) => {   // on the roof: ladder, folded crane, beacon
+  drawVehicle(v, v.x, v.y, v.ang, "van", LOOK.van || (S.armor ? "#8b939e" : "#f1efe6"), S.phase === "night" && busy ? "on" : "off", (P, z, L, Wd, k, box) => {   // on the roof: ladder, folded crane, beacon
     const line = (a0, b0, a1, b1) => { const p = P(a0, b0, z), q = P(a1, b1, z); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); };
     if (S.armor) { ctx.fillStyle = "#5d6470"; for (const a of [-.7, -.2, .3]) for (const b of [-.7, .7]) { const p = P(L * a, Wd * b, z); ctx.fillRect(p.x - .8, p.y - .8, 1.6, 1.6); } }
-    ctx.strokeStyle = "#8d96a6"; ctx.lineWidth = 1.2 * k; ctx.beginPath(); line(-L * .9, -Wd * .4, L * .35, -Wd * .4); line(-L * .9, Wd * .4, L * .35, Wd * .4);
-    for (let a = -.85; a <= .3; a += .17) line(L * a, -Wd * .4, L * a, Wd * .4); ctx.stroke();
-    if (S.crane) { ctx.strokeStyle = "#facc15"; ctx.lineWidth = 2.6 * k; ctx.beginPath(); line(-L * .8, 0, L * .3, 0); ctx.stroke(); }
+    if (!S.crane) { ctx.strokeStyle = "#8d96a6"; ctx.lineWidth = 1.2 * k; ctx.beginPath(); line(-L * .9, -Wd * .4, L * .35, -Wd * .4); line(-L * .9, Wd * .4, L * .35, Wd * .4);
+      for (let a = -.85; a <= .3; a += .17) line(L * a, -Wd * .4, L * a, Wd * .4); ctx.stroke(); }
+    else {   // the crane upgrade: a yellow turret at the back, a folded boom over the cab and a work basket at its tip
+      box(-L * .85, -L * .45, Wd * .55, z, z + 2.2 * k, "#e0a800");
+      const p0 = P(-L * .62, 0, z + 2.2 * k), p1 = P(L * .5, 0, z + 3.4 * k);
+      ctx.lineCap = "round"; ctx.strokeStyle = "#7a5c00"; ctx.lineWidth = 3.2 * k; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      ctx.strokeStyle = "#facc15"; ctx.lineWidth = 2.2 * k; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.lineCap = "butt";
+      box(L * .42, L * .78, Wd * .45, z + 1.6 * k, z + 4.6 * k, "#f2b705", {face:(i, pts) => fillQ(quadAt(pts, .15, .85, .55, .85), "rgba(0,0,0,.25)")});   // basket
+    }
     const b = P(L * .55, 0, z + 1.5 * k);
     if (busy) uprightAt(ctx, b.x, b.y, () => { const on = (now / 200 | 0) % 2; ctx.fillStyle = "#3a3f4a"; ctx.fillRect(b.x - 3.2 * k, b.y, 6.4 * k, 1.6 * k);
       ctx.fillStyle = ctx.shadowColor = on ? "#ff8a1f" : "#ffd24a"; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(b.x, b.y - .4 * k, 2.4 * k, Math.PI, 0); ctx.fill(); ctx.shadowBlur = 0; });
