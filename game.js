@@ -731,17 +731,17 @@ function drawBg() {
   drawTrees(c, trees);
   c.fillStyle = "#cfd5df"; c.font = "700 13px Barlow Condensed, sans-serif"; c.textAlign = "center"; { const [lx, ly] = lblSpot(px + pw / 2, py + ph / 2 + 4, 16); c.fillText("PARK", lx, ly); }
   // sidewalks: paving on both sides of every street, with faint slabs
-  c.fillStyle = "#30343c"; const SW2 = ST / 2 + 3 + SWK;
+  c.fillStyle = "#3a3e48"; const SW2 = ST / 2 + 3 + SWK;
   for (const x of VS) c.fillRect(x - SW2, 0, SW2 * 2, H);
   for (const y of HS_ALL) c.fillRect(0, y - SW2, W, SW2 * 2);
-  c.fillStyle = "rgba(255,255,255,.035)";
+  c.fillStyle = "rgba(255,255,255,.06)";
   for (const x of VS) for (let y = 0; y < H; y += 9) { c.fillRect(x - SW2, y, SWK, 1); c.fillRect(x + ST / 2 + 3, y, SWK, 1); }
   for (const y of HS_ALL) for (let x = 0; x < W; x += 9) { c.fillRect(x, y - SW2, 1, SWK); c.fillRect(x, y + ST / 2 + 3, 1, SWK); }
   // streets
   c.fillStyle = "#262a33";
   for (const x of VS) c.fillRect(x - ST/2, 0, ST, H);
   for (const y of HS_ALL) c.fillRect(0, y - ST/2, W, ST);
-  c.fillStyle = "#3b404b";
+  c.fillStyle = "#565c69";
   for (const x of VS) { c.fillRect(x - ST/2 - 3, 0, 3, H); c.fillRect(x + ST/2, 0, 3, H); }
   for (const y of HS_ALL) { c.fillRect(0, y - ST/2 - 3, W, 3); c.fillRect(0, y + ST/2, W, 3); }
   c.fillStyle = "#262a33";
@@ -1024,7 +1024,8 @@ function checkGone() {
 }
 function slotAt(p, rad) {
   let best = null, bd = rad;
-  for (const s of slots) { const d = s.axis === "xy" || s.axis === "yd" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6); if (d < bd) { bd = d; best = s; } }
+  for (const s of slots) { const hd = s.lamp ? Math.hypot(s.x + UPV.x * LPH(s) - p.x, s.y + UPV.y * LPH(s) - p.y) : 1e9;   // the lamp head (up on its post) counts too
+    const d = Math.min(hd, s.axis === "xy" || s.axis === "yd" ? Math.hypot(s.x - p.x, s.y - p.y) : Math.min(Math.hypot(s.x - p.x, s.y - p.y), Math.hypot(s.rx - p.x, s.ry - p.y) + 6)); if (d < bd) { bd = d; best = s; } }
   return best;
 }
 function toWorld(e) { const c = scr2cv(e.clientX, e.clientY), pw = pbox().w; return unproj(c.u / cssW * pw / VZ + VX, c.v / cssW * pw / VZ + VY); }
@@ -2503,7 +2504,7 @@ function drawStrays() {
 }
 function drawMoths() {   // tiny moths circling lit bulbs, only when zoomed in enough to see them
   if (S.phase !== "night" || pxPerU() < 1.3) return; const t = performance.now() / 1000; ctx.fillStyle = "rgba(255,250,225,.85)";
-  for (const s of slots) if (isLit(s)) for (let i = 0; i < 3; i++) { const a = t * (2.2 + i * .7) + s.id * 1.7 + i * 2.1, r = 4 + i * 1.6; uprightAt(ctx, s.x, s.y, () => { ctx.beginPath(); ctx.arc(s.x + Math.cos(a) * r, s.y - 3 + Math.sin(a * 1.3) * r * .6, .7, 0, 6.28); ctx.fill(); }); }
+  for (const s of slots) if (isLit(s)) for (let i = 0; i < 3; i++) { const a = t * (2.2 + i * .7) + s.id * 1.7 + i * 2.1, r = 4 + i * 1.6; uprightAt(ctx, s.x, s.y, () => { ctx.translate(0, -LPH(s)); ctx.beginPath(); ctx.arc(s.x + Math.cos(a) * r, s.y - 3 + Math.sin(a * 1.3) * r * .6, .7, 0, 6.28); ctx.fill(); }); }
 }
 let SEATS = null;   // park benches and café tables, worked out once per map
 function seats() {
@@ -2947,7 +2948,8 @@ function face(x, y, mood) {
   if (mood > 0) ctx.arc(x, y + .5, 2.6, .2, Math.PI - .2); else if (mood < 0) ctx.arc(x, y + 4, 2.6, Math.PI + .3, -.3); else { ctx.moveTo(x - 2.5, y + 2); ctx.lineTo(x + 2.5, y + 2); }
   ctx.stroke();
 }
-function lampHead(s, col, lit) { uprightAt(ctx, s.x, s.y, () => lampHead0(s, col, lit)); }
+const LPH = s => s.lamp && s.lamp.m.f.id === "fe" ? 6.5 : 11;   // how high the lamp head sits above its foot (map units, screen-up)
+function lampHead(s, col, lit) { uprightAt(ctx, s.x, s.y, () => { ctx.translate(0, -LPH(s)); lampHead0(s, col, lit); }); }
 function lampHead0(s, col, lit) {
   if (s.lamp.m.style === "moderna" && s.lamp.m.kind !== "park") {
     ctx.fillStyle = lit ? col : "#6b6f7a"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(s.x - 6, s.y - 2.5, 12, 5, 2) : ctx.rect(s.x - 6, s.y - 2.5, 12, 5); ctx.fill(); if (LOOK.cap) { ctx.fillStyle = LOOK.cap; ctx.fillRect(s.x - 6, s.y - 4.5, 12, 2); }
@@ -3031,14 +3033,14 @@ function render() {
     if (!avail(s)) continue;
     if (!s.lamp) { ctx.strokeStyle = s.zone === "park" ? "rgba(255,200,130,.5)" : "rgba(200,210,230,.28)"; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); continue; }
     // three different posts: Ulična LED = tall grey pole with an arm over the street, Klasični = tall dark ornate pole, Fenjer = short park post with a plinth
-    const fid = s.lamp.m.f.id, ph = fid === "fe" ? 6.5 : 11, pb = {x:s.x - UPV.x * ph, y:s.y - UPV.y * ph};   // foot of the post, straight below the lamp on the screen
+    const fid = s.lamp.m.f.id, ph = LPH(s), pb = {x:s.x, y:s.y};   // the foot of the post stands on the slot (on the sidewalk); the head is up on the post
     ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(pb.x, pb.y); ctx.lineTo(pb.x + SHV.x * ph * 1.3, pb.y + SHV.y * ph * 1.3); ctx.stroke();   // post shadow on the ground
-    uprightAt(ctx, s.x, s.y, () => { const x = s.x, y = s.y; ctx.lineCap = "round";
+    uprightAt(ctx, s.x, s.y, () => { ctx.translate(0, -ph); const x = s.x, y = s.y; ctx.lineCap = "round";
       if (fid === "ul") { ctx.strokeStyle = "#8a919e"; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(x - 5, y + ph); ctx.lineTo(x - 5, y - 1.5); ctx.quadraticCurveTo(x - 5, y - 3.5, x - 2.5, y - 3); ctx.stroke(); ctx.fillStyle = "#6b7280"; ctx.fillRect(x - 6.5, y + ph - 1.5, 3, 1.5); }   // pole and arm
       else if (fid === "kl") { ctx.strokeStyle = "#46574f"; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(x, y + ph); ctx.lineTo(x, y + 2); ctx.stroke(); ctx.fillStyle = "#46574f"; ctx.fillRect(x - 2, y + ph - 2, 4, 2); ctx.fillRect(x - 1.8, y + ph * .45, 3.6, 1.2); }   // dark pole with a base and a ring
       else { ctx.fillStyle = "#24282f"; ctx.fillRect(x - 1.3, y + 2, 2.6, ph - 2); ctx.fillRect(x - 2.6, y + ph - 1.8, 5.2, 1.8); ctx.fillRect(x - 2, y + 3, 4, 1); }   // short thick lantern post on a plinth
       ctx.lineCap = "butt"; });
-    if (fid !== "fe") { ctx.fillStyle = "#4a4f5c"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, 6.28); ctx.fill(); }
+    if (fid !== "fe") uprightAt(ctx, s.x, s.y, () => { ctx.translate(0, -ph); ctx.fillStyle = "#4a4f5c"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, 6.28); ctx.fill(); });
   }
   for (const r of refls) { // tripod
     ctx.strokeStyle = "#7a8496"; ctx.lineWidth = 1.5; ctx.beginPath();
@@ -3211,8 +3213,8 @@ function render() {
   }
   cand.sort((a, b) => a.pr - b.pr); const placed = [];
   for (const {s, txt, col, mood} of cand) {
-    const lift = vans.some(v => Math.abs(v.x - s.x) < 40 && Math.abs(v.y - s.y) < 40) ? (ISO ? 26 : 20) : 0, ty = s.y - 11 - lift, fw = mood == null ? 0 : 7, tw = ctx.measureText(txt).width + 8 - (fw ? 0 : 6);   // a van at the lamp stays visible under the badge
-    const p = proj(s.x, s.y), r = {x0:p.x - tw / 2 - 2 - fw, x1:p.x + tw / 2 + 6 + fw, y0:p.y - 23 - lift, y1:p.y - 6 - lift};
+    const lift = vans.some(v => Math.abs(v.x - s.x) < 40 && Math.abs(v.y - s.y) < 40) ? (ISO ? 26 : 20) : 0, ty = s.y - 11 - lift - LPH(s), fw = mood == null ? 0 : 7, tw = ctx.measureText(txt).width + 8 - (fw ? 0 : 6);   // a van at the lamp stays visible under the badge
+    const p = proj(s.x, s.y), r = {x0:p.x - tw / 2 - 2 - fw, x1:p.x + tw / 2 + 6 + fw, y0:p.y - 23 - lift - LPH(s), y1:p.y - 6 - lift - LPH(s)};
     if (placed.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) continue; placed.push(r);
     uprightAt(ctx, s.x, s.y, () => { ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(s.x - tw / 2 - fw, ty - 10, tw + 2 * fw, 13, 6.5); ctx.fill();
       ctx.fillStyle = col; ctx.fillText(txt, s.x - fw, ty);
