@@ -122,6 +122,8 @@ const SEASONS = {
 const SEASON = () => { const lat = MAP && MAP.part === "my" && CITYD ? +CITYD.lat : 44.9; let m = new Date().getMonth(); if (lat < -5) m = (m + 6) % 12; return SEASONS[m === 11 || m < 2 ? "winter" : m < 5 ? "spring" : m < 8 ? "summer" : "autumn"]; };
 const WX_K = {fog:.75, rain:.88, snow:.85};   // how far the light reaches in that weather
 const wxK = () => S.phase === "night" && WX_K[S.weather] || 1;
+const WX_WEAR = {rain:1.4, storm:1.4, fog:1.25, snow:1.3};   // wet and damp nights wear bulbs out faster
+const wxWear = () => S.phase === "night" && WX_WEAR[S.weather] || 1;
 const WX_LABEL = () => ({fog:Tx("Magla: domet −25%"), storm:Tx("Oluja: pazi na stare lampe"), rain:Tx("Kiša: domet −12%"), snow:Tx("Sneg: domet −15%, kombiji sporiji")})[S.weather] || "";
 const SAT_UP = 1 / 60, SAT_DOWN = 1 / 12;   // satisfaction per second lit / dark at night
 const SAVE_KEY = MAP ? "lightThemUp.borca.q" + MAP.id : "lightThemUp.save.v2";
@@ -147,7 +149,7 @@ const STAR_PERK = [Tx("Osnovni nivo"), Tx("Stanari plaćaju 5% više"), Tx("Tend
 const TARIFF = 1.4;   // expensive power night: +40%
 const wageOf = () => (vans.length - 1) * 20 + S.speedLv * 10 + Object.keys(S.mgr || {}).length * MGR_WAGE;   // paid every dawn
 
-const DEFAULTS = () => ({req:null, reqAt:-1, mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
+const DEFAULTS = () => ({nst:{lit:0, t:0, scared:0, caught:0, smashed:0}, req:null, reqAt:-1, mgr:{}, ev:null, nextEv:"", money:140, t:0, genLv:0, speedLv:0, unlocked:!!MAP, paused:true, started:false, tool:null,
   order:0, scared:0, broken:0, flashCd:0, spawnT:10, used:0, inc:0, cover:0, coverT:0, goal:0, banner:null,
   night:1, phase:"night", phaseT:SEASON().night, nLen:SEASON().night, nightVal:0, nightN:0, dayRate:0, led:{pay:0, fuel:0, buy:0, bounty:0, theft:0, mis:0, obj:0, wage:0, ten:0}, report:"", weather:"", stormT:0, addon:null, dawn:null, dispOff:false, tariff:1, crane:false, armor:false, zInd:false, zCen:false, heat:false, lastStars:2, out:0, outAt:-1, thiefT:20, patrol:null, calm:0, tips:{}, genHp:1, dispatch:false, loan:0, tender:null, tenderCd:2, rep:30, carT:3, dispT:1, honkT:0, nightTheft:0, trafficCount:0, trafficPay:0, trafo:0, solar:false, ups:false, upsCharge:0, trip:0, tripCd:0, upsOn:false, humT:0, big:false, bigBroke:0, mission:null, bulb:"ob", gang:{presence:60, rage:0, gone:false, lv:1, back:0}, dark:.78, sel:null, hover:null, pending:null, msgT:0, moodHappy:0, moodSad:0, sat:0});
 const S = DEFAULTS();
@@ -562,7 +564,7 @@ let NOSAVE = false;   // set when this town was just parked, so a reload cannot 
 function save() {
   if (!S.started || NOSAVE) return;
   try {
-    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv","nLen","req","reqAt"];
+    const keys = ["money","t","genLv","speedLv","unlocked","scared","broken","goal","night","phase","phaseT","order","nightVal","nightN","dayRate","led","report","tips","bulb","gang","genHp","trafo","solar","ups","upsCharge","dispatch","loan","tender","rep","tenderCd","big","bigBroke","mission","lastPay","weather","dispOff","tariff","crane","armor","zInd","zCen","heat","lastStars","auto","autoRate","mgr","ev","nextEv","nLen","req","reqAt","nst"];
     const d = {v:3, at:Date.now(), zones, dyn:slots.slice(BASE_N).filter(s => s !== tmp).map(s => ({x:s.bx, y:s.by, rx:s.rx, ry:s.ry, axis:s.axis, sg:s.sg, side:s.side})), S:Object.fromEntries(keys.map(k => [k, S[k]])), vans:vans.length,
       lamps:slots.filter(s => s.lamp).map(s => ({id:s.id, x:s.x, y:s.y, m:s.lamp.m.id, life:s.lamp.life, hp:s.lamp.hp, state:s.lamp.state, order:s.lamp.order, sensor:!!s.lamp.sensor, glass:!!s.lamp.glass})),
       jobs:jobs.map(j => ({id:j.slot.id, type:j.type, m:j.m.id, wb:!!j.wb})), sat:houses.map(h => Math.round(h.sat * 100))};
@@ -679,7 +681,40 @@ function resize() {
 let rsP = false; new ResizeObserver(() => { if (rsP) return; rsP = true; requestAnimationFrame(() => { rsP = false; if (cv.offsetWidth !== cssW || cv.offsetHeight !== cssH) resize(); }); }).observe(cv);   // at most once a frame, only for a real size change
 const VSH = () => pbox().w * cssH / cssW;   // projected units visible top to bottom at VZ = 1
 // A little 3D: buildings stand up. Each house keeps its spot on the ground; its roof is drawn BZ units higher and a front wall fills the gap.
-const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : 14) * (ISO ? 1.5 : 1);   // building height, screen units: walls stand up toward the viewer
+const BZ = h => (!h ? 8 : h.fac ? 16 : h.plot ? 11 : h.poly ? (h.w * h.h > 1400 ? 16 : 11) : facade(h).kind === "flat" ? 19 : 14) * (ISO ? 1.5 : 1);
+// ---------- Building faces (invented quarter): a few shops with a shop window and an awning, some taller flats, the rest plain houses ----------
+// Picked from the house number, so a house always looks the same; the footprints and the street layout do not change.
+const AWN = ["#b8453a", "#2f6fa8", "#3f8a52", "#c0842a", "#7a4f9a"];
+function hrand(h, k) { let x = Math.imul((h.id + 1) | 0, 374761393) + Math.imul(k | 0, 668265263); x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; }
+function facade(h) {
+  if (h.fz) return h.fz;
+  const r = hrand(h, 1), Y1 = h.y + h.h, street = HS_ALL.some(y => y > Y1 && y - Y1 < 62);
+  const kind = h.fac || h.poly ? "none" : h.plot ? "house" : street && r < .5 ? "shop" : r > .72 ? "flat" : "house";
+  const win = [], row = (s, len, t, dt, step, w) => { for (let u = 4; u + w < len - 3; u += step) win.push({s, u, du:w, t, dt}); };
+  if (kind === "shop") {
+    const n = h.w > 40 ? 3 : 2, door = 5, pane = (h.w - 6 - door) / n;   // the shop window in panes, a glass door in between
+    for (let i = 0, u = 3; i < n; i++) { if (i === 1) { win.push({s:0, u, du:door - 1, t:.04, dt:.5, shop:true, door:true}); u += door; } win.push({s:0, u, du:pane - 1, t:.08, dt:.42, shop:true}); u += pane; }
+    row(0, h.w, .7, .2, 8, 4); row(1, h.h, .2, .3, 10, 4); row(1, h.h, .64, .22, 10, 4);
+  } else if (kind === "flat") { for (const t of [.12, .44, .74]) { row(0, h.w, t, .17, 8, 4); row(1, h.h, t, .17, 9, 4); } }
+  else if (kind === "house") { row(0, h.w, .32, .38, 10, 4); row(1, h.h, .32, .38, 11, 4); if (win.length) { const d = win.find(w => !w.s && w.u > h.w * .35) || win[0]; Object.assign(d, {t:0, dt:.56, door:true}); } }
+  return (h.fz = {kind, win, awn:AWN[hrand(h, 2) * AWN.length | 0]});
+}
+// lit = false: the walls in the map picture (day colours); lit = true: only the windows that shine at night
+function drawFacade(c, h, o, lit) {
+  const F = facade(h), X0 = h.x, X1 = h.x + h.w, Y0 = h.y, Y1 = h.y + h.h; if (F.kind === "none") return;
+  const q = (s, u, du, t, dt) => { const a = t, b = t + dt; c.beginPath();
+    if (!s) { c.moveTo(X0 + u + o.x * a, Y1 + o.y * a); c.lineTo(X0 + u + du + o.x * a, Y1 + o.y * a); c.lineTo(X0 + u + du + o.x * b, Y1 + o.y * b); c.lineTo(X0 + u + o.x * b, Y1 + o.y * b); }
+    else { c.moveTo(X1 + o.x * a, Y0 + u + o.y * a); c.lineTo(X1 + o.x * a, Y0 + u + du + o.y * a); c.lineTo(X1 + o.x * b, Y0 + u + du + o.y * b); c.lineTo(X1 + o.x * b, Y0 + u + o.y * b); }
+    c.closePath(); c.fill(); };
+  if (!lit && F.kind === "shop") {   // the awning over the shop window, striped
+    c.fillStyle = F.awn; q(0, 1.5, h.w - 3, .52, .12); c.fillStyle = "rgba(255,255,255,.35)"; for (let u = 3; u < h.w - 4; u += 6) q(0, u, 3, .52, .12); }
+  F.win.forEach((w, k) => {
+    if (w.s && !ISO) return;
+    if (lit) { if (w.door && !w.shop) return; if (!w.shop && !(hrand(h, 20 + k) < .2 + .65 * h.sat)) return;
+      c.fillStyle = w.shop ? `rgba(255,236,190,${.4 + .55 * h.glow})` : `rgba(255,205,110,${.25 + .7 * h.glow})`; }
+    else c.fillStyle = w.shop ? (w.door ? "rgba(70,96,118,.95)" : "rgba(96,128,152,.92)") : w.door ? "rgba(58,40,30,.92)" : "rgba(20,24,34,.75)";
+    q(w.s, w.u, w.du, w.t, w.dt); });
+}   // building height, screen units: walls stand up toward the viewer
 // Map labels stay clear of the lamp badges (checked on the screen, so it works in both views).
 function lblFree(x, y, hw) { const p = proj(x, y); return slots.every(sl => { const q = proj(sl.x, sl.y), d = q.y - p.y; return Math.abs(q.x - p.x) > hw + 46 || d <= -16 || d >= 30; }); }
 function lblSpot(x, y, hw, tries = [[0, 0], [0, 22], [0, -34], [-50, 0], [50, 0], [0, 40], [0, -52], [-50, 22], [50, 22]]) { const p = proj(x, y);   // moves are on the screen
@@ -765,8 +800,7 @@ function drawBg() {
     const quad = (pts, col) => { c.fillStyle = col; c.beginPath(); pts.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); };
     quad([[X0, Y1], [X1, Y1], [X1 + o.x, Y1 + o.y], [X0 + o.x, Y1 + o.y]], shade(rc, .6));   // front wall (lit side)
     quad([[X1, Y0], [X1, Y1], [X1 + o.x, Y1 + o.y], [X1 + o.x, Y0 + o.y]], shade(rc, .42));   // side wall (in shade); flat view: none
-    if (!fac) { for (let x = X0 + 4; x < X1 - 4; x += 9) quad([[x + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .8, Y1 + o.y * .8], [x + o.x * .8, Y1 + o.y * .8]], "rgba(20,24,34,.75)");
-      if (ISO) for (let y = Y0 + 4; y < Y1 - 4; y += 9) quad([[X1 + o.x * .2, y + o.y * .2], [X1 + o.x * .2, y + 4 + o.y * .2], [X1 + o.x * .8, y + 4 + o.y * .8], [X1 + o.x * .8, y + o.y * .8]], "rgba(20,24,34,.75)"); }   // dark windows; lit ones come at night
+    if (!fac) drawFacade(c, h, o, false);   // windows, doors and shop windows; the lit ones come at night
     c.save(); c.translate(o.x, o.y);   // the roof, lifted up
     c.fillStyle = rc; c.fillRect(h.x, ry, h.w, h.h);
     if (fac) { c.fillStyle = "#6e747d"; for (let x = h.x + 3; x < h.x + h.w - 4; x += 8) c.fillRect(x, ry + 3, 5, h.h - 6); c.fillStyle = "#7a3a2a"; c.fillRect(h.x + h.w - 9, ry + 3, 6, 6); }
@@ -1044,7 +1078,7 @@ function scare(h, quiet) {
   if (h.state === "flee") return false;
   h.state = "flee"; h.fear = 0; h.fy = ENTRIES.reduce((a, e) => Math.abs(e - h.y) < Math.abs(a - h.y) ? e : a) + rnd(-6, 6);
   if (quiet) return true;
-  S.scared++; misProg("scare"); dailyInc("scare"); if (S.ev && S.ev.type === "hoods") S.ev.n++;
+  S.scared++; if (S.nst) S.nst.scared++; misProg("scare"); dailyInc("scare"); if (S.ev && S.ev.type === "hoods") S.ev.n++;
   const G = S.gang;
   if (h.x >= TURF_X && h.x < W && h.y > 0 && h.y < boundY()) {
     const z = zones.find(z => Math.hypot(z.x - h.x, z.y - h.y) < 60);
@@ -1903,13 +1937,13 @@ const MUSIC = (() => {
 })();
 // ---------- Ambient sound: night crickets, the hum of the lamps, van engines, rain and thunder, birds by day (no files, all made here) ----------
 const AMB = (() => {
-  let ac = null, out = null, hum = null, eng = null, rain = null, wind = null, chirpT = 2, birdT = 4, lastL = 0;
+  let ac = null, out = null, nb = null, hum = null, eng = null, rain = null, wind = null, chirpT = 2, birdT = 4, dogT = 9, carT = 6, lastL = 0;
   const g = (v) => { const n = ac.createGain(); n.gain.value = v; return n; };
   function init() {
     if (ac) return true;
     try {
       ac = new (window.AudioContext || window.webkitAudioContext)(); out = g(1); out.connect(ac.destination);
-      const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       const noise = (type, f, q) => { const s = ac.createBufferSource(); s.buffer = nb; s.loop = true; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const gg = g(0); s.connect(fl); fl.connect(gg); gg.connect(out); s.start(); return gg; };
       rain = noise("bandpass", 2400, .6); wind = noise("lowpass", 380, .7);
       { const o = ac.createOscillator(), o2 = ac.createOscillator(), fl = ac.createBiquadFilter(); o.type = "sawtooth"; o.frequency.value = 100; o2.type = "sine"; o2.frequency.value = 200; fl.type = "lowpass"; fl.frequency.value = 420; hum = g(0); o.connect(fl); o2.connect(fl); fl.connect(hum); hum.connect(out); o.start(); o2.start(); }   // mains hum of the lamps
@@ -1920,6 +1954,17 @@ const AMB = (() => {
   const to = (n, v) => { try { n.gain.setTargetAtTime(v, ac.currentTime, .4); } catch (e) {} };
   function blip(f, f2, dur, vol, type = "sine", at = 0) { const t = ac.currentTime + at, o = ac.createOscillator(), gg = g(0); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(vol, t + dur * .2); gg.gain.exponentialRampToValueAtTime(.0005, t + dur); o.connect(gg); gg.connect(out); o.start(t); o.stop(t + dur + .02); }
   function thunder() { const t = ac.currentTime, s = ac.createBufferSource(), fl = ac.createBiquadFilter(), gg = g(0); s.buffer = ac.createBuffer(1, ac.sampleRate * 3, ac.sampleRate); const d = s.buffer.getChannelData(0); let v = 0; for (let i = 0; i < d.length; i++) { v = v * .98 + (Math.random() * 2 - 1) * .2; d[i] = v; } fl.type = "lowpass"; fl.frequency.value = 160; gg.gain.setValueAtTime(.0001, t); gg.gain.exponentialRampToValueAtTime(.5, t + .08); gg.gain.exponentialRampToValueAtTime(.001, t + 2.8); s.connect(fl); fl.connect(gg); gg.connect(out); s.start(t); }
+  // a dog barking somewhere in the quarter: two or three short, rough "woofs"
+  function bark(vol) { const n = 1 + (Math.random() * 3 | 0), f0 = 260 + Math.random() * 160, pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+    const fl = ac.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = 1100; if (pan) { pan.pan.value = Math.random() * 1.6 - .8; fl.connect(pan); pan.connect(out); } else fl.connect(out);
+    for (let k = 0; k < n; k++) { const t = ac.currentTime + k * (.22 + Math.random() * .08), o = ac.createOscillator(), gg = g(0); o.type = "sawtooth";
+      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * .62, t + .13); gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(vol, t + .015); gg.gain.exponentialRampToValueAtTime(.0005, t + .16);
+      o.connect(gg); gg.connect(fl); o.start(t); o.stop(t + .18); } }
+  // a car passing on a far-off road: road noise that swells and fades, its pitch sliding down as it goes by
+  function farCar(vol) { const t = ac.currentTime, d = 3 + Math.random() * 2.5, src = ac.createBufferSource(), fl = ac.createBiquadFilter(), gg = g(0); src.buffer = nb; src.loop = true;
+    fl.type = "lowpass"; fl.Q.value = 1.2; fl.frequency.setValueAtTime(260, t); fl.frequency.linearRampToValueAtTime(720, t + d * .5); fl.frequency.linearRampToValueAtTime(240, t + d);
+    gg.gain.setValueAtTime(.0001, t); gg.gain.exponentialRampToValueAtTime(vol, t + d * .5); gg.gain.exponentialRampToValueAtTime(.0001, t + d);
+    src.connect(fl); fl.connect(gg); gg.connect(out); src.start(t, Math.random() * 1.5); src.stop(t + d + .05); }
   let on = false;
   function update(dt) {
     const want = S.started && !S.paused && !SFX.muted && !document.hidden;
@@ -1929,11 +1974,15 @@ const AMB = (() => {
     const night = S.phase === "night", wx = night ? S.weather : "";
     const lit = slots.filter(s => isLit(s)).length, moving = vans.filter(v => v.state === "drive" || v.state === "return").length;
     to(hum, night ? Math.min(.012, .0018 * Math.sqrt(lit)) : 0);
+    // a dark quarter is a quiet quarter: crickets, dogs and far-off cars get louder as more lamps shine
+    const sh = night ? litShare() : 1, life = night ? .3 + .7 * (sh == null ? 0 : sh) : 1, wet = wx === "rain" || wx === "storm";
     to(eng, Math.min(2, moving) * .022);
     to(rain, wx === "storm" ? .07 : wx === "rain" ? .045 : wx === "snow" ? .006 : 0);
     to(wind, wx === "snow" || wx === "storm" ? .05 : wx === "fog" ? .02 : night ? .012 : .008);
     if (S.lightning > lastL + .3) thunder(); lastL = S.lightning;
-    if (night && wx !== "storm" && wx !== "rain" && wx !== "snow" && SEASON().id !== "winter") { chirpT -= dt; if (chirpT <= 0) { chirpT = .6 + Math.random() * 2.4; const f = 4200 + Math.random() * 900, n = 2 + (Math.random() * 3 | 0); for (let k = 0; k < n; k++) blip(f, 0, .05, .006, "sine", k * .09); } }   // crickets
+    if (night && wx !== "storm" && wx !== "rain" && wx !== "snow" && SEASON().id !== "winter") { chirpT -= dt; if (chirpT <= 0) { chirpT = .6 + Math.random() * 2.4; const f = 4200 + Math.random() * 900, n = 2 + (Math.random() * 3 | 0); for (let k = 0; k < n; k++) blip(f, 0, .05, .006 * life, "sine", k * .09); } }   // crickets
+    dogT -= dt; if (dogT <= 0) { const rowdy = night && (hoods.length || thieves.length); dogT = (night ? 7 + Math.random() * 16 : 20 + Math.random() * 30) * (rowdy ? .45 : 1) * (wet ? 2 : 1); bark(.022 * life * (.45 + Math.random() * .55)); }   // dogs, more of them when hooligans or thieves are about
+    carT -= dt; if (carT <= 0) { carT = (night ? 9 + Math.random() * 18 : 5 + Math.random() * 10); farCar((wet ? .03 : .02) * life * (.5 + Math.random() * .5)); }   // cars on far-off roads
     if (!night && wx === "") { birdT -= dt; if (birdT <= 0) { birdT = 2 + Math.random() * 5; const f = 2400 + Math.random() * 1600; blip(f, f * 1.4, .12, .01); blip(f * 1.3, f * .9, .14, .008, "sine", .16); } }   // birds by day
   }
   const kick = () => { if (!SFX.muted && init() && ac.state === "suspended" && S.started && !S.paused) try { ac.resume(); } catch (e) {} };
@@ -2112,7 +2161,8 @@ function step(dt) {
     if (S.phase === "night") {
       S.phase = "day"; S.phaseT = SEASON().day; reqDawn(); recSet(r => { r.nights++; r.rep = Math.max(r.rep, Math.round(S.rep)); r.cover = Math.max(r.cover, Math.floor(S.cover * 100)); });
       S.dayRate = S.nightN ? .5 * S.nightVal / S.nightN * (S.nLen || NIGHT_LEN) / S.phaseT : 0; S.nightVal = 0; S.nightN = 0;
-      if (S.mission && !S.mission.done && !S.mission.fail) { if (["house", "nobreak", "load"].includes(S.mission.type)) misWin(); else misFail(Tx("Nisi stigao do cilja.")); }
+      if (S.mission && !S.mission.done && !S.mission.fail) { if (["house", "nobreak", "load"].includes(S.mission.type) || S.mission.type === "lit" && nightLit() >= S.mission.n) misWin(); else misFail(S.mission.type === "lit" ? Tx("Lampe nisu svetlele dovoljno.") : Tx("Nisi stigao do cilja.")); }
+      const misD = S.mission ? {goal:misGoal(S.mission), ok:S.mission.done, reward:S.mission.reward} : null;
       const repD = repStep(S.cover);
       if (S.tender && (S.tender.type === "cover" && S.cover >= .9 || S.tender.type === "safe" && !S.tenderTheft)) S.tender.prog++;
       S.tenderTheft = 0; checkTender();
@@ -2141,13 +2191,13 @@ function step(dt) {
       { const G = S.gang; G.rage = Math.max(0, G.rage - 15); const before = zones.length; zones = zones.filter(z => z.perm || z.until > S.night); if (zones.length < before && !G.gone) S.reopened = before - zones.length; }
       refls = []; S.patrol = null; S.calm = 0;
       SFX.dawn(); msg(Tx`Svanulo! Noć ${S.night} je prošla. Ukupno ${net >= 0 ? "+" : ""}${net} $.`);
-      S.dawn = {night:S.night, net, day:Math.round(S.dayRate * SEASON().day), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
-        notes:[misLine, bigLine, evLine, S.reqLine || "", S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
+      S.dawn = {st:{lit:S.nst && S.nst.t > 0 ? nightLit() : null, scared:S.nst ? S.nst.scared : 0, caught:S.nst ? S.nst.caught : 0, smashed:S.nst ? S.nst.smashed : 0, mis:misD}, night:S.night, net, day:Math.round(S.dayRate * SEASON().day), rows:[[Tx("Stanari"), L.pay], [Tx("Nagrade"), L.bounty], [Tx("Automatizovani kvartovi (posle održavanja)"), L.auto || 0], [MAP ? Tx("Trafika, stajalište i mesta") : Tx("Trafika i stajalište"), L.obj], [stars() >= 5 ? Tx("Grad i tenderi") : Tx("Tender (avans / penal)"), L.ten || 0], [S.tariff > 1 ? Tx("Struja (skupa tarifa)") : Tx("Struja"), -L.fuel], [Tx("Kupovina i popravke"), -L.buy], [Tx("Plate radnika"), -(L.wage || 0)], [Tx("Lopovi"), -(L.theft || 0)], [Tx("Kazna misije"), -(L.mis || 0)]].filter(r => Math.round(r[1]) !== 0),
+        notes:[S.nst && S.nst.smashed ? Tx`Huligani su razbili lampi: ${S.nst.smashed}.` : "", bigLine, evLine, S.reqLine || "", S.nextEv ? Tx`Sledeće noći: ${EV_NAME[S.nextEv]}!` : "", tenLine, loanLine, S.trafficPay0 ? Tx` Putarina +${S.trafficPay0} $.` : "", Tx` Reputacija ${starStr(stars())} ${S.rep}/100 (${repD >= 0 ? "+" : ""}${repD}).`, (n => n ? Tx`Lampi ispod 20% veka: ${n}. Zameni ih danju, upola je cene.` : "")(slots.filter(s => s.lamp && s.lamp.state === "ok" && wearLv(s.lamp) >= 2).length), (S.night + 1) % 5 === 0 ? Tx(" Sledeća noć je VELIKA NOĆ!") : ""].map(t => t.trim()).filter(Boolean)};
       dailyInc("night"); { const dd = dailyGet(), nd = dd.tasks.filter(t => t.done).length; if (nd < dd.tasks.length) S.dawn.notes.push(Tx`Dnevni zadaci: gotovo ${nd} od ${dd.tasks.length}.`); }
       showDawn(); S.weather = ""; S.tariff = 1;
       if (S.tool === "ref") setTool(null);
     } else {
-      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.nLen = S.phaseT = SEASON().night; S.night++; S.req = null; S.reqAt = S.night >= 2 && Math.random() < .6 ? S.nLen * rnd(.78, .92) : -1; S.spawnT = 8; S.thiefT = rnd(12, 25);
+      $("dawn").hidden = true; SFX.night(); S.phase = "night"; S.nLen = S.phaseT = SEASON().night; S.night++; S.nst = {lit:0, t:0, scared:0, caught:0, smashed:0}; S.req = null; S.reqAt = S.night >= 2 && Math.random() < .6 ? S.nLen * rnd(.78, .92) : -1; S.spawnT = 8; S.thiefT = rnd(12, 25);
       S.outAt = S.night >= 3 && Math.random() < .3 + (1 - S.genHp) * .7 ? rnd(15, S.nLen - 15) : -1;
       S.boAt = BL && S.night >= 2 && Math.random() < Math.min(.6, .2 + .08 * BL) ? rnd(20, S.nLen - 30) : -1;
       const G = S.gang;
@@ -2160,7 +2210,7 @@ function step(dt) {
       if (S.tariff > 1) S.banner.sub += " " + Tx("Skupa struja +40%") + ".";
       { const se = SEASON(); S.weather = ""; if (S.night >= 2) { let r = Math.random(); for (const k in se.wx) { if ((k === "storm" || k === "fog") && S.night < 3) continue; if (r < se.wx[k]) { S.weather = k; break; } r -= se.wx[k]; } } S.stormT = rnd(6, 10);
         if (S.night === 1 || !S.tips["season_" + se.id]) { S.tips["season_" + se.id] = 1; S.banner.sub += " " + Tx`${se.ico} ${se.name}: noć traje ${se.night} s, dan ${se.day} s.`; }
-        if (S.weather) { S.banner.sub += " " + WX_LABEL() + "."; if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } } }
+        if (S.weather) { S.banner.sub += " " + WX_LABEL() + ". " + Tx("Sijalice se po ovakvom vremenu brže troše."); if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } } }
       S.mission = newMission(); if (S.mission) { S.banner.sub += " " + misText(S.mission); S.msgT = 0; }
       S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0; evStart();
       if (S.big) {
@@ -2170,8 +2220,9 @@ function step(dt) {
     }
     save();
   }
+  if (S.phase === "night" && dt > 0 && S.nst) { const sh = litShare(); if (sh != null) { S.nst.lit += sh * dt; S.nst.t += dt; } }
   for (const s of slots) if (isLit(s)) {
-    s.lamp.life -= dt / s.lamp.m.life;
+    s.lamp.life -= dt / s.lamp.m.life * wxWear();
     { const lv = wearLv(s.lamp); if (s.lamp.warn == null) s.lamp.warn = lv; else if (lv > s.lamp.warn) { s.lamp.warn = lv; if (lv < 4) wearWarn(s, lv); } }
     if (s.lamp.life <= 0) { s.lamp.life = 0; s.lamp.state = "burnt"; SFX.fizz(); float(s.x, s.y - 14, Tx("Izgorela!"), "#ff6b5b"); }
   }
@@ -2280,7 +2331,7 @@ function step(dt) {
       r.done = true; const s = r.slot;
       if (s.lamp && s.lamp.state === "ok") {
         s.lamp.hp -= 1 / (s.lamp.m.armor * (s.lamp.glass ? 2 : 1)); burst(s.x, s.y, "#cfd6e6", 4, 50);
-        if (s.lamp.hp <= 0) { s.lamp.state = "broken"; if (S.big) S.bigBroke++;SFX.smash(); S.broken++; if (S.mission && S.mission.type === "nobreak") misFail(Tx("Huligani su razbili lampu.")); S.gang.presence = Math.min(100, S.gang.presence + 3); S.gang.rage = Math.max(0, S.gang.rage - 5); burst(s.x, s.y, "rgb(" + s.lamp.m.col + ")", 22, 110); float(s.x, s.y - 14, Tx("Razbijena!"), "#ff6b5b"); msg(Tx("Huligani su razbili lampu! Dodirni je za popravku."), true); }
+        if (s.lamp.hp <= 0) { s.lamp.state = "broken"; if (S.big) S.bigBroke++; if (S.nst) S.nst.smashed++;SFX.smash(); S.broken++; if (S.mission && S.mission.type === "nobreak") misFail(Tx("Huligani su razbili lampu.")); S.gang.presence = Math.min(100, S.gang.presence + 3); S.gang.rage = Math.max(0, S.gang.rage - 5); burst(s.x, s.y, "rgb(" + s.lamp.m.col + ")", 22, 110); float(s.x, s.y - 14, Tx("Razbijena!"), "#ff6b5b"); msg(Tx("Huligani su razbili lampu! Dodirni je za popravku."), true); }
       }
     }
   }
@@ -2704,7 +2755,15 @@ function fixAll() {
 function showDawn() {
   const D = S.dawn, el = document.getElementById("dawn"); if (!D || !el) return;
   const r = v => Math.round(v);
-  el.querySelector(".dn-t").textContent = Tx`Svanulo! Noć ${D.night} je prošla`;
+  const st = D.st, sg = v => (v >= 0 ? "+" : "−") + Math.abs(r(v)) + " $";
+  el.querySelector(".dn-t").textContent = st ? Tx`Noć ${D.night} završena` : Tx`Svanulo! Noć ${D.night} je prošla`;
+  // the night in numbers: stars for how well the quarter was lit, four tiles, the night's goal
+  const nS = !st || st.lit == null ? -1 : st.lit >= 90 ? 3 : st.lit >= 70 ? 2 : st.lit >= 40 ? 1 : 0;
+  el.querySelector(".dn-stars").innerHTML = nS < 0 ? "" : [0, 1, 2].map(i => `<span class="${i < nS ? "on" : ""}">★</span>`).join("");
+  el.querySelector(".dn-st").innerHTML = !st ? "" : [["💡", Tx("Svetlo tokom noći"), st.lit == null ? "–" : st.lit + "%"], ["🏃", Tx("Oterani huligani"), st.scared], ["🕵", Tx("Uhvaćeni lopovi"), st.caught], ["💰", Tx("Zarada"), sg(D.net)]]
+    .map(([i, k, v], j) => `<div class="dn-tile${j === 3 ? (D.net >= 0 ? " pos" : " neg") : ""}"><i>${i}</i><b>${v}</b><span>${k}</span></div>`).join("");
+  const g = el.querySelector(".dn-goal"); g.hidden = !(st && st.mis);
+  if (st && st.mis) { g.className = "dn-goal " + (st.mis.ok ? "ok" : "fail"); g.innerHTML = `<b>${st.mis.ok ? "✓" : "✗"} ${Tx("Cilj noći")}</b> ${esc(st.mis.goal)}${st.mis.ok ? ` <em>+${st.mis.reward} $</em>` : ` <em>${Tx("nije uspelo")}</em>`}`; }
   el.querySelector(".dn-rows").innerHTML = D.rows.map(([k, v]) => Tx`<div class="dn-r"><span>${k}</span><b class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : "−"}${Math.abs(r(v))} $</b></div>`).join("") +
     Tx`<div class="dn-r dn-sum"><span>Ukupno</span><b class="${D.net >= 0 ? "pos" : "neg"}">${D.net >= 0 ? "+" : "−"}${Math.abs(D.net)} $</b></div>`;
   el.querySelector(".dn-notes").innerHTML = [...D.notes, Tx`Danas stanari daju još oko ${D.day} $.`].map(t => Tx`<li>${t}</li>`).join("");
@@ -2848,14 +2907,19 @@ function repStep(cover) {
 const repDiscount = () => S.rep / 500;   // up to 20% cheaper power
 
 // ---------- Night missions: one goal per night, big reward, penalty on failure ----------
+// share of the placed lamps that shine right now (null = no lamps yet), and the average over this night in %
+function litShare() { let n = 0, l = 0; for (const s of slots) if (s.lamp && avail(s)) { n++; if (isLit(s)) l++; } return n ? l / n : null; }
+const nightLit = () => S.nst && S.nst.t > 0 ? Math.round(100 * S.nst.lit / S.nst.t) : 0;
 function misReward() { return Math.round(Math.max(50 + 10 * S.night, .35 * (S.lastPay || 0)) / 10) * 10; }
 function newMission() {
   if (S.night < GANG_N) return null;
   const types = ["thief", "house", "nobreak"];
   if (!S.gang.gone) types.push("scare", "scare");
   if (S.load > .7 && S.load <= .86) types.push("load", "load");
+  if (slots.filter(s => s.lamp && avail(s)).length >= 4) types.push("lit", "lit");
   const type = types[Math.random() * types.length | 0], m = {type, prog:0, n:0, over:0, done:false, fail:false, reward:misReward()};
   if (type === "thief") m.n = 2 + Math.floor(S.night / 5);
+  if (type === "lit") m.n = S.night < 6 ? 80 : S.night < 12 ? 85 : 90;
   if (type === "scare") m.n = 4 + Math.floor(S.night / 3);
   if (type === "house") {
     const hs = houses.filter(h => hOn(h) && !h.fac && h.y > 120), dark = hs.filter(h => !litAt(h.cx, h.y + h.h + 5, LIGHT_K));
@@ -2863,10 +2927,14 @@ function newMission() {
   }
   return m;
 }
-function misText(m) {
+function misGoal(m) {
+  return m.type === "lit" ? Tx`drži bar ${m.n}% lampi upaljeno do zore` : misText(m, true); }
+function misText(m, bare) {
   if (!m) return "";
+  if (m.type === "lit" && !bare && !m.done && !m.fail) return Tx`Misija: ${misGoal(m)} (sada ${S.nst && S.nst.t > 0 ? nightLit() : "–"}%) · +${m.reward} $`;
   const t = m.type === "thief" ? Tx`uhvati ${m.n} lopova (${m.prog}/${m.n})` : m.type === "scare" ? Tx`oteraj ${m.n} huligana (${m.prog}/${m.n})`
     : m.type === "house" ? Tx("čuvaj kuću ČUVAJ do zore") : m.type === "nobreak" ? Tx("nijedna razbijena lampa") : Tx`generator ispod 86% (${Math.round(m.over)}/3 s)`;
+  if (bare) return t;
   return m.done ? Tx`Misija uspela! +${m.reward} $` : m.fail ? Tx("Misija propala.") : Tx`Misija: ${t} · +${m.reward} $`;
 }
 function misWin() {
@@ -2911,7 +2979,7 @@ function spawnThief() {
 function catchThief(t, how) {
   SFX.catch();
   t.gone = true; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
-  S.money += prize; S.led.bounty += THIEF.reward; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
+  S.money += prize; S.led.bounty += THIEF.reward; if (S.nst) S.nst.caught++; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
   burst(t.x, t.y, "#f1c453", 16, 80); float(t.x, t.y - 14, Tx`Lopov uhvaćen! +${prize} $`, "#7ed39a", true);
   msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : how === "patrol" ? Tx`Patrola je uhvatila lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
 }
@@ -3182,16 +3250,12 @@ function render() {
   for (const h of houses) {
     if (!hOn(h)) continue;
     const z = BZ(h), o = up(z), Y1 = h.y + h.h, X1 = h.x + h.w;
-    const wq = (pts) => { ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); };
     [[.25, .28], [.68, .28], [.25, .68], [.68, .68]].forEach((p, i) => {
       if (!h.win[i] && !(h.glow > .05 && i < 1 + h.sat * 3.2)) return;   // a lit street switches on more windows: the happier the house, the more
       ctx.fillStyle = h.glow > .05 ? `rgba(255,205,110,${.25 + .7 * h.glow})` : S.phase === "day" ? "rgba(150,180,210,.5)" : "rgba(40,50,80,.5)";
       ctx.fillRect(h.x + h.w * p[0] - 2.5 + o.x, h.y + h.h * p[1] - 3 + o.y, 5, 6);
-      if (h.glow > .05 && !h.poly && !h.fac) {   // the same light in the walls
-        const x = h.x + 4 + 9 * i; if (x + 4 < X1 - 2) wq([[x + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .2, Y1 + o.y * .2], [x + 4 + o.x * .8, Y1 + o.y * .8], [x + o.x * .8, Y1 + o.y * .8]]);
-        const y = h.y + 4 + 9 * i; if (ISO && y + 4 < Y1 - 2) wq([[X1 + o.x * .2, y + o.y * .2], [X1 + o.x * .2, y + 4 + o.y * .2], [X1 + o.x * .8, y + 4 + o.y * .8], [X1 + o.x * .8, y + o.y * .8]]);
-      }
     });
+    if (h.glow > .05 && !h.poly && !h.fac && !(S.zInd && inRect(h.cx, h.cy, ZONES2.ind.r))) drawFacade(ctx, h, o, true);   // the same light in the walls: shop windows and some flats
     if (xmasOn && S.phase === "night" && h.lit && !h.fac) {   // New Year lights along the roof edge
       const pts = h.poly || [h.x, h.y, X1, h.y, X1, Y1, h.x, Y1], n = pts.length / 2, tq = performance.now() / 400 | 0; let k = h.id;
       for (let i = 0; i < n; i++) { const ax = pts[2 * i], ay = pts[2 * i + 1], bx = pts[(2 * i + 2) % pts.length], by = pts[(2 * i + 3) % pts.length], L = Math.hypot(bx - ax, by - ay), m = Math.max(1, Math.round(L / 7));
