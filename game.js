@@ -6,6 +6,7 @@ const VS = [100, 310, 520];            // vertical streets (x)
 const HS_ALL = [90, 340, 590, 840];    // horizontal streets (y)
 const LOCK_Y = 715;                    // below this line is the old quarter (new plot)
 const ST = 34;
+const SWK = 10, LAMP_LAT = ST / 2 + 4, PED_LAT = ST / 2 + 3 + SWK / 2 + 1;   // invented quarter: a 10-unit sidewalk past the kerb; lamps stand at the kerb, people walk in the middle
 const DEPOT = {x:520, y:150};
 const PARK = [327, 357, 176, 216];     // x, y, w, h
 // BQ0 (the real Borča quarters from OpenStreetMap) is in borca-map.js
@@ -330,8 +331,9 @@ function drawLandmarks() {
   ctx.restore();
 }
 const LAMP_CURB = 9;   // a street lamp on a real map stands at least this far from the asphalt, like the lamps the map starts with
-function curbFix(s) {   // a lamp saved by an older version too close to the road moves back onto the sidewalk
-  if (!MAP || s.axis !== "s" || !MSEG[s.sg]) return; const g = MSEG[s.sg], o = segD(s.x, s.y, g);
+function curbFix(s) {   // a lamp saved by an older version: on a real map too close to the road moves back onto the sidewalk; in the invented quarter it moves to the kerb
+  if (!MAP) { if (s.axis === "y" && s.rx != null) setSlotPos(s, s.rx + Math.sign(s.x - s.rx || 1) * LAMP_LAT, s.y); else if (s.axis === "x" && s.ry != null) setSlotPos(s, s.x, s.ry + Math.sign(s.y - s.ry || 1) * LAMP_LAT); return; }
+  if (s.axis !== "s" || !MSEG[s.sg]) return; const g = MSEG[s.sg], o = segD(s.x, s.y, g);
   if (o.d < g.w / 2 + LAMP_CURB) { const q = segPt(g, o.t, (g.w / 2 + LAMP_CURB) * (s.side || o.side)); if (!inBld(q.x, q.y, 0)) setSlotPos(s, q.x, q.y); }
 }
 function mapPosOk(self, x, y, c) {
@@ -468,8 +470,8 @@ function coverPts() { if (MAP) return COVER_PTS; const by = boundY(); if (by !==
   if (MAP) { buildMap(); return; }
   const HY = [45, 173, 257, 423, 507, 673, 757, 920];
   const add = (x, y, rx, ry, axis) => slots.push({id:slots.length, x, y, rx, ry, bx:x, by:y, axis, plot:y > LOCK_Y, zone:axis === "xy" ? "park" : "ulica", district:y > LOCK_Y ? "stari" : "novi", lamp:null, job:null});
-  VS.forEach((x, j) => HY.forEach((y, i) => { const side = j === 0 ? -26 : j === 2 ? 26 : (i % 2 ? 26 : -26); add(x + side, y, x, y, "y"); }));
-  for (const y of HS_ALL) for (const x of [205, 415]) add(x, y + 26, x, y, "x");
+  VS.forEach((x, j) => HY.forEach((y, i) => { const side = (j === 0 ? -1 : j === 2 ? 1 : (i % 2 ? 1 : -1)) * LAMP_LAT; add(x + side, y, x, y, "y"); }));
+  for (const y of HS_ALL) for (const x of [205, 415]) add(x, y + LAMP_LAT, x, y, "x");
   add(395, 470, 310, 470, "xy"); add(470, 420, 520, 420, "xy"); add(440, 545, 440, 590, "xy");   // inside the park
 
   const streets = [...VS.map(x => [x - ST/2, 0, ST, H]), ...HS_ALL.map(y => [0, y - ST/2, W, ST])];
@@ -539,7 +541,7 @@ const lanternTool = () => { const f = pal ? pal.f : S.tool; return !!FIXTURES[f]
 function freeSpot(p) {   // any sidewalk spot next to a street, or inside the park (a lantern also in a yard between buildings)
   if (lanternTool()) { const y = yardCand(p); if (y && spotOk(y)) return y; }
   if (MAP) return freeSpotMap(p);
-  const cands = [], side = d => (d < 0 ? -1 : 1) * clamp(Math.abs(d), 22, 34);
+  const cands = [], side = d => (d < 0 ? -1 : 1) * LAMP_LAT;   // always at the kerb, so the sidewalk stays free for people
   for (const v of VS) { const d = p.x - v; if (Math.abs(d) < 60) cands.push({x:v + side(d), y:p.y, rx:v, ry:p.y, axis:"y"}); }
   for (const h of hs()) { const d = p.y - h; if (Math.abs(d) < 60) cands.push({x:p.x, y:h + side(d), rx:p.x, ry:h, axis:"x"}); }
   if (p.x > PARK[0] + 12 && p.x < PARK[0] + PARK[2] - 12 && p.y > PARK[1] + 12 && p.y < PARK[1] + PARK[3] - 12) cands.push({x:p.x, y:p.y, rx:p.x < PARK[0] + PARK[2] / 2 ? 310 : 520, ry:p.y, axis:"xy"});
@@ -728,6 +730,13 @@ function drawBg() {
   }
   drawTrees(c, trees);
   c.fillStyle = "#cfd5df"; c.font = "700 13px Barlow Condensed, sans-serif"; c.textAlign = "center"; { const [lx, ly] = lblSpot(px + pw / 2, py + ph / 2 + 4, 16); c.fillText("PARK", lx, ly); }
+  // sidewalks: paving on both sides of every street, with faint slabs
+  c.fillStyle = "#30343c"; const SW2 = ST / 2 + 3 + SWK;
+  for (const x of VS) c.fillRect(x - SW2, 0, SW2 * 2, H);
+  for (const y of HS_ALL) c.fillRect(0, y - SW2, W, SW2 * 2);
+  c.fillStyle = "rgba(255,255,255,.035)";
+  for (const x of VS) for (let y = 0; y < H; y += 9) { c.fillRect(x - SW2, y, SWK, 1); c.fillRect(x + ST / 2 + 3, y, SWK, 1); }
+  for (const y of HS_ALL) for (let x = 0; x < W; x += 9) { c.fillRect(x, y - SW2, 1, SWK); c.fillRect(x, y + ST / 2 + 3, 1, SWK); }
   // streets
   c.fillStyle = "#262a33";
   for (const x of VS) c.fillRect(x - ST/2, 0, ST, H);
@@ -880,7 +889,7 @@ function slotPosOk(s, x, y) {
 function moveSlot(s, px, py) {
   if (MAP) return moveSlotMap(s, px, py);
   const M = 45; let x = s.x, y = s.y;
-  const band = (v, road, base) => base < road ? clamp(v, road - 40, road - 19) : clamp(v, road + 19, road + 40);   // stay on the sidewalk, same side
+  const band = (v, road, base) => base < road ? road - LAMP_LAT : road + LAMP_LAT;   // stays at the kerb, same side (the sidewalk is for people)
   if (s.axis === "y") { y = clamp(py, s.by - M, s.by + M); x = band(px, s.rx, s.bx); }
   else if (s.axis === "x") { x = clamp(px, s.bx - M, s.bx + M); y = band(py, s.ry, s.by); }
   else if (s.axis === "yd") { x = clamp(px, s.bx - M, s.bx + M); y = clamp(py, s.by - M, s.by + M); }
@@ -2387,27 +2396,63 @@ const PED_COLS = ["#e07a5f", "#81b29a", "#f2cc8f", "#a5a6f6", "#9ad1d4", "#e5989
 function updatePeds(dt) {
   updateStrays(dt);
   if (MAP && peds.length < 6 && Math.random() < dt * .35) spawnPedMap();
-  else if (!MAP && peds.length < 5 && Math.random() < dt * .35) {
-    const by = boundY(), vert = Math.random() < .5, dir = Math.random() < .5 ? 1 : -1, side = Math.random() < .5 ? -17 : 17;
+  else if (!MAP && peds.length < (promOn() ? 10 : 5) && Math.random() < dt * (promOn() ? .8 : .35)) {
+    const by = boundY(), dir = Math.random() < .5 ? 1 : -1, prom = promOn() && Math.random() < .6, pv = prom ? PROM_ST[Math.random() * PROM_ST.length | 0] : null, vert = pv ? pv[0] === "v" : Math.random() < .5, side = pv ? pv[2] * PED_LAT : (Math.random() < .5 ? -1 : 1) * PED_LAT;   // on the promenade's sidewalks when it is lit
     const p = {vert, dir, ang:vert ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (dir > 0 ? 0 : Math.PI), col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(16, 22), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false, dog:Math.random() < .25};
-    if (vert) { p.x = VS[Math.random() * VS.length | 0] + side; p.y = dir > 0 ? -8 : by + 8; } else { const ys = hs(); p.y = ys[Math.random() * ys.length | 0] + side; p.x = dir > 0 ? -8 : W + 8; }
+    if (pv) { if (vert) { p.x = pv[1] + side; p.y = dir > 0 ? -8 : by + 8; } else { p.y = pv[1] + side; p.x = dir > 0 ? -8 : W + 8; } }
+    else if (vert) { p.x = VS[Math.random() * VS.length | 0] + side; p.y = dir > 0 ? -8 : by + 8; } else { const ys = hs(); p.y = ys[Math.random() * ys.length | 0] + side; p.x = dir > 0 ? -8 : W + 8; }
     peds.push(p);
   }
   const night = S.phase === "night", by = boundY();
   for (const p of peds) {
     const lit = !night || litAt(p.x, p.y, LIGHT_K);
     if (p.chat > 0) p.chat -= dt; else if (night && lit && !p.chatted && Math.random() < dt * .25) { const o = peds.find(q => q !== p && !(q.chat > 0) && Math.hypot(q.x - p.x, q.y - p.y) < 30); if (o) { p.chat = o.chat = 3.5; p.chatted = o.chatted = true; } }   // two people meet under a lamp and stop to talk
+    if (p.sitting) { p.sitT -= dt; if (p.sitT <= 0 || (night && !lit)) visitLeave(p); continue; }   // sitting on a bench or at a café table; gets up after a while, or at once when the light goes out
+    if (p.visit && p.path && p.done) { visitSit(p); continue; }
+    if (p.leaving && p.path && p.done) { p.path = null; p.leaving = false; p.done = false; p.ang = p.vert ? (p.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (p.dir > 0 ? 0 : Math.PI); }   // back on the sidewalk: walk on to the edge of the map
     const sp = p.sp * (night && !lit ? 1.4 : night ? .75 : 1) * (p.chat > 0 ? 0 : 1) * dt;   // they hurry through the dark and stroll under the lamps
     if (p.path) movePath(p, sp); else if (p.vert) p.y += sp * p.dir; else p.x += sp * p.dir; if (sp > 0) p.bob += dt * 9 * (night && !lit ? 1.3 : 1);
     p.moodT = Math.max(0, p.moodT - dt);
     if (night && !lit && !p.worried && p.moodT <= 0) { p.worried = true; p.mood = -1; p.moodT = 2.2; }
     if (night && lit && p.worried && !p.happy) { p.happy = true; p.mood = 1; p.moodT = 2; S.money += 1; S.led.bounty += 1; float(p.x, p.y - 18, "+1", "#7ed39a"); }
-    if (p.path ? p.done : p.x < -12 || p.x > W + 12 || p.y < -12 || p.y > by + 12) p.gone = true;
+    if (p.path ? p.done && !p.visit && !p.leaving : p.x < -12 || p.x > W + 12 || p.y < -12 || p.y > by + 12) p.gone = true;
   }
   peds = peds.filter(p => !p.gone);
+  if (!MAP) visitTick(dt);
+}
+// ---------- Seats come alive (invented quarter): someone walks up, sits for a while, gets up and walks on, then the next one comes ----------
+const PROM_ST = [["h", 340, 1], ["h", 590, -1], ["v", 100, 1], ["v", 310, -1]];   // the promenade's four sidewalks (street, and the side toward the zone)
+const promOn = () => !MAP && S.zCen && S.phase === "night" && promLit();
+let promLitT = 0, promLitV = false;
+function promLit() { const t = performance.now(); if (t - promLitT > 1000) { promLitT = t; const r = ZONES2.cen.r, pts = [[r[0] + r[2] * .25, r[1] + r[3] - 8], [r[0] + r[2] * .75, r[1] + r[3] - 8], [r[0] + r[2] * .5, r[1] + 8], [r[0] + 8, r[1] + r[3] / 2]]; promLitV = pts.filter(([x, y]) => litAt(x, y, LIGHT_K)).length >= 2; } return promLitV; }
+function sideEntry(x, y) {   // the nearest point on a sidewalk walking line
+  let best = null, bd = 1e9;
+  for (const v of VS) for (const sd of [-1, 1]) { const q = {x:v + sd * PED_LAT, y, vert:true}, d = Math.abs(q.x - x); if (d < bd) { bd = d; best = q; } }
+  for (const h of hs()) for (const sd of [-1, 1]) { const q = {x, y:h + sd * PED_LAT, vert:false}, d = Math.abs(q.y - y); if (d < bd) { bd = d; best = q; } }
+  return best;
+}
+function visitTick(dt) {
+  const night = S.phase === "night";
+  for (const st of seats()) {
+    if (st.zone === "cen" && !S.zCen) continue;
+    st.occ = st.occ || 0; st.coming = st.coming || 0;
+    const lit = !night || litAt(st.x, st.y, LIGHT_K), cap = 2, prom = st.zone === "cen" || st.prom;
+    if (!lit || st.occ + st.coming >= cap || peds.length >= 14) continue;
+    if (Math.random() < dt * (prom && night ? .14 : night ? .05 : .03)) {
+      const E = sideEntry(st.x, st.y); if (!E) continue;
+      const p = {path:[{x:E.x, y:E.y}, {x:st.x, y:st.y + 3}], i:0, bx:E.x, by:E.y, lane:0, ang:0, visit:st, col:PED_COLS[Math.random() * PED_COLS.length | 0], sp:rnd(14, 19), bob:Math.random() * 6, mood:0, moodT:0, happy:false, worried:false, dog:Math.random() < .2};
+      movePath(p, 0); peds.push(p); st.coming++;
+    }
+  }
+}
+function visitSit(p) { const st = p.visit; st.coming = Math.max(0, st.coming - 1); if (st.occ >= 2) { visitLeave(p, true); return; } st.occ++; p.sitting = true; p.sitT = rnd(5, 12); }
+function visitLeave(p, noSeat) {
+  const st = p.visit; if (!noSeat && p.sitting) st.occ = Math.max(0, st.occ - 1); p.sitting = false; p.visit = null;
+  const E = sideEntry(st.x + rnd(-20, 20), st.y + rnd(-20, 20)); p.path = [{x:st.x, y:st.y + 3}, {x:E.x, y:E.y}]; p.i = 0; p.bx = st.x; p.by = st.y + 3; p.done = false; p.leaving = true;
+  p.vert = E.vert; p.dir = Math.random() < .5 ? 1 : -1; p.ang = p.vert ? (p.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (p.dir > 0 ? 0 : Math.PI); movePath(p, 0);
 }
 function drawPeds() {
-  for (const p of peds) {
+  for (const p of peds) { if (p.sitting) continue;
     // a small standing person: shadow, walking legs, swinging arms, coat in their colour, head with hair (smaller and calmer than the hooligan)
     const sw = Math.sin(p.bob * 1.6), k = Math.max(1, 15 / (17 * pxPerU()));
     if (p.hair == null) { p.hair = ["#2b2118", "#5a3a22", "#c9a16a", "#1b1b1f", "#8a8a8a"][Math.random() * 5 | 0]; p.legs = ["#2c3344", "#3b3b40", "#4a3f35"][Math.random() * 3 | 0]; }
@@ -2471,20 +2516,21 @@ function seats() {
   const free = (x, y, k) => x > 8 && x < W - 8 && y > 8 && y < boundY() - 8 && !road(x, y, 3) && !inHouse(x, y, 2) && !(k && Math.hypot(x - k.x, y - k.y) < 13) && !SEATS.some(o => Math.hypot(o.x - x, o.y - y) < 15);
   const place = (x, y, k) => { for (let r = 0; r <= 90; r += 3) for (let a = 0; a < 16; a++) { const q = {x:x + Math.cos(a / 16 * 6.283) * r, y:y + Math.sin(a / 16 * 6.283) * r}; if (free(q.x, q.y, k)) return q; if (!r) break; } return null; };
   const k = SPOTS.find(o => o.id === "kiosk"); if (k) for (const [dx, dy] of [[-22, 18], [0, 24], [22, 18]]) { const q = place(k.x + dx, k.y + dy, k); if (q) SEATS.push({x:q.x, y:q.y, kind:"cafe", cen:true}); }   // a small café garden by the kiosk
-  if (!MAP) { const r = ZONES2.cen.r; for (const [fx, fy] of [[.3, .93], [.5, .95], [.7, .93]]) { const q = place(r[0] + r[2] * fx, r[1] + r[3] * fy); if (q) SEATS.push({x:q.x, y:q.y, kind:"cafe", zone:"cen"}); } }
+  if (!MAP) { const r = ZONES2.cen.r; for (const [fx, fy] of [[.3, .93], [.5, .95], [.7, .93]]) { const q = place(r[0] + r[2] * fx, r[1] + r[3] * fy); if (q) SEATS.push({x:q.x, y:q.y, kind:"cafe", zone:"cen"}); }
+    for (const fx of [.3, .7]) { const q = place(r[0] + r[2] * fx, r[1] + 15); if (q) SEATS.push({x:q.x, y:q.y, kind:"bench", zone:"cen"}); } }   // promenade benches
   return SEATS;
 }
 function drawSeats() {
   const night = S.phase === "night", k = Math.max(1, 13 / (15 * pxPerU()));
   for (const st of seats()) {
     if (st.zone === "cen" && !S.zCen) continue;
-    const lit = !night || litAt(st.x, st.y, LIGHT_K), busy = lit && ((st.x * 7 + st.y * 3) % 5 < (night ? 3 : 2));   // people sit only where it is light
+    const lit = !night || litAt(st.x, st.y, LIGHT_K), busy = MAP ? lit && ((st.x * 7 + st.y * 3) % 5 < (night ? 3 : 2)) : (st.occ || 0) > 0, nSit = MAP ? 2 : st.occ || 0;   // people sit only where it is light (invented quarter: real visitors come and go)
     uprightAt(ctx, st.x, st.y, () => { ctx.save(); ctx.translate(st.x, st.y); ctx.scale(k, k);
       ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(0, .5, 6, 1.6, 0, 0, 6.28); ctx.fill();
       if (st.kind === "bench") { ctx.fillStyle = "#6b4a2e"; ctx.fillRect(-6, -3.2, 12, 1.6); ctx.fillRect(-6, -6.4, 12, 1.4); ctx.fillStyle = "#2c2f36"; ctx.fillRect(-5.5, -1.8, 1, 1.8); ctx.fillRect(4.5, -1.8, 1, 1.8); }
       else { ctx.fillStyle = "#3a3f4a"; ctx.fillRect(-7.5, -2.6, 2.4, 2.6); ctx.fillRect(5.1, -2.6, 2.4, 2.6); ctx.fillStyle = "#cfc8b4"; ctx.fillRect(-.4, -9, .8, 5); ctx.fillRect(-.6, -3, 1.2, 3); ctx.fillStyle = "#e8e4da"; ctx.beginPath(); ctx.ellipse(0, -3.6, 4.2, 1.3, 0, 0, 6.28); ctx.fill();   // chairs, a round table
         ctx.fillStyle = (st.x | 0) % 2 ? "#c84a3c" : "#3d7a4a"; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.quadraticCurveTo(0, -14.5, 8, -9); ctx.closePath(); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(-8, -9.4, 16, .8); }   // umbrella
-      if (busy) for (const dx of st.kind === "bench" ? [-2.8, 2.6] : [-5, 5]) { const c = PED_COLS[(st.x + dx * 3 | 0) % PED_COLS.length & 7] || "#81b29a"; ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(dx - 1.8, -8.6, 3.6, 5, 1.4); ctx.fill(); ctx.fillStyle = "#2c3344"; ctx.fillRect(dx - 1.6, -3.8, 3.2, 1.4); ctx.fillStyle = "#f1d3b3"; ctx.beginPath(); ctx.arc(dx, -10.2, 1.7, 0, 6.28); ctx.fill(); }
+      if (busy) for (const dx of (st.kind === "bench" ? [-2.8, 2.6] : [-5, 5]).slice(0, nSit)) { const c = PED_COLS[(st.x + dx * 3 | 0) % PED_COLS.length & 7] || "#81b29a"; ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(dx - 1.8, -8.6, 3.6, 5, 1.4); ctx.fill(); ctx.fillStyle = "#2c3344"; ctx.fillRect(dx - 1.6, -3.8, 3.2, 1.4); ctx.fillStyle = "#f1d3b3"; ctx.beginPath(); ctx.arc(dx, -10.2, 1.7, 0, 6.28); ctx.fill(); }
       ctx.restore(); });
   }
 }
