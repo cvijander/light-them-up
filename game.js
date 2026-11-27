@@ -2794,7 +2794,17 @@ function spawnThief() {
   const p = side === 0 ? {x:-12, y:rnd(30, by - 30)} : side === 1 ? {x:W + 12, y:rnd(30, by - 30)} : side === 2 ? {x:rnd(30, W - 30), y:-12} : {x:rnd(30, W - 30), y:by + 12};
   const th = {x:p.x, y:p.y, g, state:"go", work:0, seen:0, sp:rnd(44, 54), bob:0, loot:0, rep:0}; thieves.push(th);
   if (subsidy()) { th.rep = 5; msg(Tx`Stanari javljaju: lopov ulazi u kvart sa ${["zapada", "istoka", "severa", "juga"][side]}!`, true); }
-  if (!S.tips.thief) tip("thief", Tx("Lopov u kvartu!"), Tx("Lopovi obijaju mračne stanove i kradu kola. Svetlo ih hvata: ako lopov stoji u svetlu, uhvaćen je i dobijaš nagradu. Možeš ga i dodirnuti."));
+  if (tut) return;
+  if (!HINTS.thief) {   // the first thief on this device: a one-sentence tip (it used to be in the long intro)
+    HINTS.thief = 1; S.tips.thief = 1; try { localStorage.setItem(HINT_KEY, JSON.stringify(HINTS)); } catch (e) {}
+    banner(Tx("Lopov u kvartu!"), Tx`Lopov (žute oči) obija mračne kuće i krade kola: uhvatiš ga svetlom ili dodirom i dobiješ +${THIEF.reward} $.`); SFX.honk();
+    float(clamp(p.x, 30, W - 30), clamp(p.y, 30, by - 30), Tx("Lopov!"), "#ffd24a", true);
+  } else {   // every thief gets a short warning, like the hooligans: a card, a sound and a sign where he comes in
+    const from = ["zapada", "istoka", "severa", "juga"][side];
+    if (!S.banner || performance.now() - S.banner.t0 > 3000) banner(Tx("Lopov u kvartu!"), Tx`Ulazi sa ${from}. Osvetli mu put ili ga dodirni za +${THIEF.reward} $.`);
+    else msg(Tx`Lopov ulazi u kvart sa ${from}!`, true);
+    SFX.honk(); float(clamp(p.x, 30, W - 30), clamp(p.y, 30, by - 30), Tx("Lopov!"), "#ffd24a", true);
+  }
 }
 function catchThief(t, how) {
   SFX.catch();
