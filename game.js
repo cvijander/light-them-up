@@ -65,10 +65,11 @@ const SFX = (() => {
   };
 })();
 const BULBS = {
-  led: {id:"led", name:Tx("LED čip"), rf:.9, power:1, life:450, cost:40},
-  st: {id:"st", name:Tx("Štedljiva"), rf:.8, power:1, life:400, cost:8},
+  // Like a real shop, cheapest first: Obična, Jaka (more light, more power), Štedljiva (half the power, lasts longer), LED čip (the best: full light, half the power, lasts longest)
   ob: {id:"ob", name:Tx("Obična"), rf:1, power:2, life:300, cost:12},
-  ja: {id:"ja", name:Tx("Jaka"), rf:1.2, power:3, life:220, cost:20},
+  ja: {id:"ja", name:Tx("Jaka"), rf:1.2, power:3, life:220, cost:16},
+  st: {id:"st", name:Tx("Štedljiva"), rf:.9, power:1, life:450, cost:22},
+  led: {id:"led", name:Tx("LED čip"), rf:1.05, power:1, life:650, cost:32},
 };
 const COMBOS = {};
 function combo(f, b) {
@@ -2095,7 +2096,7 @@ function updateUI() {
     $("upSensor").classList.toggle("armed", S.addon === "sensor"); $("upGlass").classList.toggle("armed", S.addon === "glass"); }
   if (S.started && stars() !== S.lastStars) { const up = stars() > S.lastStars; S.lastStars = stars();
     if (up) { SFX.win(); banner(Tx`Reputacija ${starStr(stars())}`, Tx`Nova nagrada: ${STAR_PERK[stars() - 1]}.`); } else msg(Tx`Reputacija je pala na ${starStr(stars())}.`, true); }
-  if (subsidy() !== lastSub) { lastSub = subsidy(); BULBS.led.cost = lastSub ? 34 : 40; refreshTools(); if (lastSub) S.tips.rep75 = 1; }
+  if (subsidy() !== lastSub) { lastSub = subsidy(); BULBS.led.cost = lastSub ? 27 : 32; refreshTools(); if (lastSub) S.tips.rep75 = 1; }
   setUp($("upCrane"), Tx("Dizalica (korpa)"), S.crane ? Tx("Ulični stubovi se montiraju duplo brže") : Tx("Duplo brža montaža uličnih stubova"), S.crane ? null : CRANE_COST);
   setUp($("upArmor"), Tx("Oklopni kombi"), S.armor ? Tx("Majstori rade i pod kamenicama") : Tx("Obični majstori čekaju kad su huligani blizu"), S.armor ? null : ARMOR_COST);
   setUp($("upInd"), Tx("Industrijska zona"), S.zInd ? Tx("Fabrike plaćaju +60%, vole LED") : Tx("Fabrike plaćaju +60%, traže jaku LED rasvetu"), S.zInd ? null : ZONES2.ind.cost);
@@ -2824,7 +2825,7 @@ function genWarn(after) {
     can || top ? "" : S.loan > 0 ? Tx`<b>Banka:</b> već otplaćuješ kredit (dug ${S.loan} $), pa novi ne možeš da uzmeš.`
         : Tx`<b>Nemaš dovoljno?</b> Banka daje kredit: ${LOAN_AMOUNT} $ odmah, a vraćaš ${LOAN_BACK} $ u ratama od ${LOAN_RATE} $ svake zore.` + (withLoan ? " " + Tx("Sa kreditom možeš odmah da kupiš generator.") : ""),
     can ? Tx("<b>Druga rešenja</b>, ako ti treba još struje:") : Tx("<b>Ako ti je kredit skup</b>, ima i drugih rešenja:"),
-    Tx`<b>Štedljive i LED sijalice</b> troše upola manje struje od običnih (1 umesto 2). Najjeftinije rešenje: Štedljiva košta ${BULBS.st.cost} $.`,
+    Tx`<b>Štedljive i LED sijalice</b> troše upola manje struje od običnih (1 umesto 2). Štedljiva košta ${BULBS.st.cost} $, LED čip ${BULBS.led.cost} $.`,
     S.unlocked ? Tx`<b>Solarni paneli</b> (${SOLAR_COST} $): +${SOLAR_CAP} struje i 30% jeftinija struja.` : Tx`<b>Solarni paneli</b> (${SOLAR_COST} $): +${SOLAR_CAP} struje, otključavaju se kad kupiš stari kvart.`,
     Tx`<b>Trafostanica</b> (${TRAFO_COST[0]} $): +${TRAFO_CAP} struje, ali tek kad generator dođe do najjačeg nivoa.`,
     Tx`<b>UPS baterija</b> (${UPS_COST} $): ne daje više struje, ali drži svetla ${UPS_SEC} sekundi kad generator štucne ili iskoči osigurač.`].filter(Boolean);
