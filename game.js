@@ -2306,7 +2306,7 @@ function step(dt) {
   if (S.calm > 0) S.calm = Math.max(0, S.calm - dt);
   const G = S.gang;
   if (!G.gone) G.rage = Math.max(0, G.rage - dt * .12);
-  if (S.phase === "night" && S.night >= GANG_N && S.calm <= 0 && !G.gone) {
+  if (S.phase === "night" && S.night >= GANG_N && S.calm <= 0 && !G.gone && !tut) {   // no gang walks in on its own during the tutorial: its hooligan comes only in its own step
     S.spawnT -= dt;
     if (S.spawnT <= 0) {
       S.spawnT = Math.max(6, 16 - (S.night - 2) * 1.5) * (60 / Math.max(15, G.presence)) * (1 - G.rage / 200) * (S.unlocked ? .85 : 1) * (S.big ? .5 : 1) * (S.ev && S.ev.type === "hoods" ? .4 : 1) / Math.min(2.2, 1 + .3 * BL);
@@ -3745,8 +3745,11 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
   {el:"cv", t:Tx("Zameni sijalicu"), s:Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba."), act:true,
     enter:() => { const s0 = slots.find(s => s !== tut.br && s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; if (S.tool) setTool(null); s0.lamp.life = 0; s0.lamp.state = "burnt"; tut.bu = s0; S.money = Math.max(S.money, 60); },
     spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => !!tut.bu.job},
+  {el:"cv", t:Tx("Servis radi"), s:Tx("Kombi ide da zameni sijalicu. Sačekaj da lampa opet zasvetli."), act:true, run:true,
+    enter:() => { if (!tut.bu || !tut.bu.job) return false; },
+    spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => tut.t > 60 || !tut.bu.job},
   {el:"cv", t:Tx("Dolazi huligan"), s:Tx("Gledaj levu ivicu: odatle iz bande dolazi huligan (crvene oči). Ide crvenim isprekidanim putevima i traži lampe da ih razbije kamenom."), run:true, hand:"watch",
-    enter:() => { const h = spawnHood(); if (!h) return false; tut.h = h; S.flashCd = 0; },
+    enter:() => { for (const o of hoods) if (o.state !== "flee") scare(o, true); const h = spawnHood(); if (!h) return false; tut.h = h; S.flashCd = 0; },
     spot:() => tut.h && tut.h.state !== "flee" && hoods.includes(tut.h) ? {x:Math.max(12, tut.h.x), y:tut.h.y} : null, done:() => tut.t > 6 || tut.h.state === "flee" || !hoods.includes(tut.h)},
   {el:"cv", t:Tx("Oteraj huligana"), s:Tx("Sad ga dodirni: baterijom ga oteraš i dobiješ 5 $. Tuda neko vreme neće prolaziti."), act:true, hand:"char",
     enter:() => { const h = tut.h; if (!h || h.state === "flee" || !hoods.includes(h)) return false; S.flashCd = 0;
@@ -3756,7 +3759,7 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
 ];
 let tut = null;
 function tutStart(force) { try { if (!force && localStorage.getItem(TUT_KEY)) return; } catch (e) { return; } tut = {i:0, t:0}; document.body.classList.add("tut-on"); tutShow(); }
-function tutEnd() { tut = null; $("tut").hidden = true; $("tutHand").hidden = true; $("tutNext").hidden = false; document.body.classList.remove("tut-on"); document.querySelectorAll(".tut-hi").forEach(e => e.classList.remove("tut-hi")); try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {} }
+function tutEnd() { tut = null; S.spawnT = Math.max(S.spawnT || 0, 8); $("tut").hidden = true; $("tutHand").hidden = true; $("tutNext").hidden = false; document.body.classList.remove("tut-on"); document.querySelectorAll(".tut-hi").forEach(e => e.classList.remove("tut-hi")); try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {} }
 function tutShow() {
   let st = TUT[tut.i]; while (st.enter && st.enter() === false && !st.last) { tut.i++; st = TUT[tut.i]; } document.querySelectorAll(".tut-hi").forEach(e => e.classList.remove("tut-hi"));
   const el0 = $(st.el), el = el0 && (el0.closest(".chip") || el0); if (el && st.el !== "cv") el.classList.add("tut-hi");
