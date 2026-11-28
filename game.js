@@ -2237,10 +2237,10 @@ function step(dt) {
       } else banner(Tx`Pada noć ${S.night}.`, S.gang.gone ? Tx`Banda se odselila. Nova stiže za ${S.gang.back - S.night} noć${S.gang.back - S.night === 1 ? "" : "i"}. Pazi na lopove!` : S.night === 2 ? Tx("Pazi, stižu prvi huligani! Dolaze iz baze na levoj ivici, crvenim rutama.") : S.reopened ? Tx("Neki zatvoreni delovi su se opet otvorili za bandu.") : Tx("Lampe svetle, banda vreba."));
       S.reopened = 0;
       S.tariff = S.night >= 2 && Math.random() < .25 ? TARIFF : 1;
-      if (S.tariff > 1) S.banner.sub += " " + Tx("Skupa struja +40%") + ".";
+      if (S.tariff > 1) { S.banner.sub += " " + Tx("Skupa struja +40%") + "."; if (!S.tips.tariff) { S.tips.tariff = 1; S.banner.sub += " " + Tx("Večeras je struja za generator skuplja, pa je zarada manja."); } }
       { const se = SEASON(); S.weather = ""; if (S.night >= 2) { let r = Math.random(); for (const k in se.wx) { if ((k === "storm" || k === "fog") && S.night < 3) continue; if (r < se.wx[k]) { S.weather = k; break; } r -= se.wx[k]; } } S.stormT = rnd(6, 10);
         if (S.night === 1 || !S.tips["season_" + se.id]) { S.tips["season_" + se.id] = 1; S.banner.sub += " " + Tx`${se.ico} ${se.name}: noć traje ${se.night} s, dan ${se.day} s.`; }
-        if (S.weather) { S.banner.sub += " " + WX_LABEL() + ". " + Tx("Sijalice se po ovakvom vremenu brže troše."); if (!S.tips[S.weather]) { S.tips[S.weather] = 1; } } }
+        if (S.weather) { S.banner.sub += " " + WX_LABEL() + ". " + Tx("Sijalice se po ovakvom vremenu brže troše."); if (!S.tips[S.weather]) { S.tips[S.weather] = 1; if (S.weather === "fog") S.banner.sub += " " + Tx("U magli lopova duže držiš na svetlu dok ga ne uhvatiš."); } } }
       S.mission = newMission(); if (S.mission) { S.banner.sub += " " + misText(S.mission); S.msgT = 0; }
       S.big = S.night >= 5 && S.night % 5 === 0; S.bigBroke = 0; evStart();
       if (S.big) {
@@ -3866,17 +3866,26 @@ const HINT_LIST = [   // [key, when, sentence]; the first one whose moment has c
   ["cover", () => S.cover >= .45, Tx("Što je veći deo kvarta osvetljen, stanari više plaćaju, a cilj je 100%.")],
   ["shop", () => S.money >= 220, Tx("Imaš para za Prodavnicu: tamo su jači generator, još kombija i nove zone.")],
   ["zones", () => !MAP && S.night >= 3 && S.money >= 350, Tx("Šetalište voli toplo svetlo, a Industrija belu LED, i obe plaćaju više: kupuješ ih u Prodavnici.")],
+  ["gang", () => S.phase === "night" && S.night >= GANG_N && !S.gang.gone && hoods.some(h => h.state !== "flee"), Tx("Traka „Banda“ pokazuje koliko je banda jaka u kvartu, a „Bes“ raste svaki put kad nekog oteraš. Kad snaga bande padne skoro do nule, banda se seli i dobijaš bonus."), Tx("Banda i bes")],
+  ["zone", () => zones.length > 0, Tx("Gde oteraš huligana, taj deo je dve noći zatvoren za bandu. Oteraj ih tri puta na istom mestu i tuda više nikad ne prolaze."), Tx("Zatvoreno za bandu")],
+  ["sat", () => S.night >= 2 && houses.some(h => hOn(h) && h.sat >= .7), Tx("Zelena traka na kući je zadovoljstvo stanara. Raste svake noći dok im ispred kuće svetli, a zadovoljni stanari plaćaju više."), Tx("Zadovoljstvo stanara")],
+  ["spots", () => !MAP && S.phase === "night" && (S.night >= 2 || SPOTS.some(o => o.lit)), Tx("Trafika i stajalište plaćaju bonus dok su noću osvetljeni. U mraku tu najradije svraćaju lopovi."), Tx("Trafika i stajalište")],
+  ["landmark", () => MAP && LMK.length > 0 && S.phase === "night", Tx("Posebna mesta sa žutim natpisom (škola, crkva, pijaca…) traže svoje svetlo. Osvetli ih onako kako piše i plaćaju bonus cele noći."), Tx("Posebna mesta")],
+  ["mission", () => S.mission && !S.mission.done && !S.mission.fail, Tx("Misija noći piše u traci za poruke. Ispuni je do zore za nagradu, a ako propadne, plaćaš malu kaznu."), Tx("Misija noći")],
+  ["tender", () => !!S.tender, Tx("Gradski tender traje nekoliko noći: avans dobiješ odmah, nagradu kad ga ispuniš, a penal ako ne stigneš do roka. Napredak vidiš u Prodavnici."), Tx("Gradski tender")],
+  ["rep", () => S.phase === "day" && S.night >= 3, Tx("Reputacija firme (zvezdice u jutarnjem izveštaju) raste posle dobro osvetljenih noći, a pada od krađa i propalih misija. Svaka nova zvezdica donosi nagradu."), Tx("Reputacija")],
+  ["mgr", () => !Object.keys(S.mgr || {}).length && slots.filter(s => s.lamp).length >= 14 && S.money >= MGR_COST[0], Tx("Mnogo lampi za održavanje? U Prodavnici zaposli majstora: sam popravlja i menja sijalice u jednom delu kvarta."), Tx("Majstor")],
 ];
 let hintT = 3;
 function hintTick(dt) {
   if (!S.started || S.paused || tut || !ov.hidden || !$("dawn").hidden) return;
   hintT -= dt; if (hintT > 0) return; hintT = 1;
   if (S.banner && performance.now() - S.banner.t0 < 6000) return;   // one card at a time
-  for (const [k, when, text] of HINT_LIST) {
+  for (const [k, when, text, title] of HINT_LIST) {
     if (HINTS[k]) continue; let go = false; try { go = when(); } catch (e) {}
     if (!go) continue;
     HINTS[k] = 1; try { localStorage.setItem(HINT_KEY, JSON.stringify(HINTS)); } catch (e) {}
-    banner(Tx("Savet"), text); hintT = 8; return;
+    banner(title || Tx("Savet"), text); hintT = 20; return;
   }
 }
 // ---------- First-minute tutorial: only once, only for a new game ----------
