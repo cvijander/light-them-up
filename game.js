@@ -991,7 +991,8 @@ function route(P, Q) {
 }
 
 // ---------- Actions ----------
-function order(s, type, m, cost) {
+function order(s, type, m, cost, force) {
+  if (type === "install" && !force && S.money >= cost && overWarn(s, m, cost)) return;   // would go over the generator: stop and explain first
   if (S.money < cost) { msg(Tx`Nemaš dovoljno novca. Treba ${cost} $.`, true);SFX.err(); float(s.x, s.y - 14, Tx("Fali novca"), "#ff6b5b"); return; }
   const note = type === "bulb" && s.lamp ? swapNote(s.lamp, m) : "";   // read before the job starts, while the old bulb is still in
   S.money -= cost; S.led.buy += cost; if (s === tmp) tmp = null;
@@ -1362,6 +1363,7 @@ $("upSensor").onclick = () => armAddon("sensor");
 $("upGlass").onclick = () => armAddon("glass");
 $("dawnOk").onclick = () => { $("dawn").hidden = true; };
 $("awayOk").onclick = () => { $("away").hidden = true; };
+$("gwOk").onclick = () => genWarnClose(false); $("gwShop").onclick = () => genWarnClose(true); $("gwGo").onclick = () => genWarnClose(false, true);
 $("upTrafo").onclick = () => { const c = TRAFO_COST[S.trafo || 0]; if (S.genLv >= 3 && c && S.money >= c) { S.money -= c; S.led.buy += c; S.trafo = (S.trafo || 0) + 1; SFX.buy(); msg(Tx`Nova trafostanica: kapacitet je sada ${genCap()}.`); save(); } };
 $("upSolar").onclick = () => { if (S.unlocked && !S.solar && S.money >= SOLAR_COST) { S.money -= SOLAR_COST; S.led.buy += SOLAR_COST; S.solar = true; SFX.buy(); msg(Tx`Solarni paneli: kapacitet ${genCap()}, struja 30% jeftinija.`); save(); } };
 $("upUps").onclick = () => { if (!S.ups && S.money >= UPS_COST) { S.money -= UPS_COST; S.led.buy += UPS_COST; S.ups = true; S.upsCharge = UPS_SEC; SFX.buy(); msg(Tx`UPS baterija: kad generator stane, svetla rade još ${UPS_SEC} sekundi.`); save(); } };
@@ -2154,6 +2156,7 @@ function step(dt) {
   const on = slots.filter(s => s.lamp && s.lamp.state === "ok" && avail(s)).sort((a, b) => a.lamp.order - b.lamp.order);
   for (const s of on) { const p = sensorIdle(s.lamp) ? 0 : s.lamp.m.power; if (used + p <= cap) { s.lamp.powered = true; used += p; } else { s.lamp.powered = false; S.overload = true; } }
   S.used = used; S.load = genCap() ? used / genCap() : 0;
+  if (!S.tips.gen80 && S.load >= .8 && dt > 0) genWarn();   // once: the generator is 80% full, time to plan a stronger one
   if (S.phase === "night" && dt > 0 && !S.trip) {
     S.tripCd -= dt;
     if (S.load > 1 && S.tripCd <= 0) {   // red zone: every few seconds the breaker may trip
@@ -2788,6 +2791,54 @@ function showDawn() {
     Tx`<div class="dn-r dn-sum"><span>Ukupno</span><b class="${D.net >= 0 ? "pos" : "neg"}">${D.net >= 0 ? "+" : "−"}${Math.abs(D.net)} $</b></div>`;
   el.querySelector(".dn-notes").innerHTML = [...D.notes, Tx`Danas stanari daju još oko ${D.day} $.`].map(t => Tx`<li>${t}</li>`).join("");
   el.hidden = false;
+}
+
+// ---------- Generator at 80%: once, early in the game, the game stops and explains what to do before the generator is full ----------
+// Order of advice: buy a stronger generator; no money -> bank loan; loan too expensive -> saver bulbs, solar panels, substation, UPS.
+// All power the quarter will draw once every lamp works and every ordered install is done (broken and burnt lamps come back on after repair).
+function planPow() { let p = 0; for (const s of slots) { const j = s.job && s.job.type === "install" ? s.job : null; p += j ? j.m.power : s.lamp ? s.lamp.m.power : 0; } return p; }
+// Before an install that would take the quarter over 100% of the generator: the game stops and says so, with the same choices as at 80%.
+// Shown once per generator size (bigger generator, substation or solar arm it again); after that only the short red message.
+let gwPend = null;
+function overWarn(s, m, cost) {
+  if (tut || !S.started) return false;
+  const cap = genCap(), after = planPow() - (s.job && s.job.type === "install" ? s.job.m.power : s.lamp ? s.lamp.m.power : 0) + m.power;
+  if (after <= cap || S.tips["over" + cap]) return false;
+  S.tips["over" + cap] = 1; S.tips.gen80 = 1; gwPend = {s, m, cost};
+  genWarn(after); return true;
+}
+function genWarn(after) {
+  const over = after != null;
+  if (!over && (!S.started || S.paused || tut || S.genLv >= GEN_COST.length || !$("dawn").hidden || !$("away").hidden)) return;
+  S.tips.gen80 = 1;
+  const el = $("genWarn"), top = S.genLv >= GEN_COST.length, c = top ? 0 : GEN_COST[S.genLv], m = Math.floor(S.money), pw = v => Number.isInteger(v) ? v : v.toFixed(1);
+  const can = !top && m >= c, withLoan = !top && !can && S.loan <= 0 && m + LOAN_AMOUNT >= c;
+  el.querySelector(".dn-t").textContent = over ? Tx("Ej, montiraš lampe preko jačine generatora!") : Tx`Generator je na ${Math.round(S.load * 100)}%!`;
+  el.querySelector(".gw-sub").textContent = over ? Tx`Sa ovom lampom kvart bi trošio ${pw(after)} od ${genCap()} struje (${Math.round(after / genCap() * 100)}%).` : Tx`Lampe troše ${pw(S.used)} od ${genCap()} struje. Uskoro ti treba jači generator.`;
+  $("gwGo").hidden = !over; $("gwOk").textContent = over ? Tx("Odustani") : Tx("Kasnije");
+  const notes = [
+    over ? Tx("Preko 100% iskače osigurač i ceo kvart se gasi na nekoliko sekundi, a lopovi i banda to jedva čekaju. Preko 110% nova lampa uopšte ne svetli.")
+      : Tx("Kad se generator napuni, nove lampe neće svetleti. Preko 100% iskače osigurač i nastaje mrak, a lopovi i banda to jedva čekaju."),
+    top ? Tx("Generator je već najjači. Struju dodaju trafostanica i solarni paneli.") : can ? Tx`<b>Jači generator</b> je u Prodavnici: ${c} $, kapacitet ${GEN_CAP[S.genLv]} → ${GEN_CAP[S.genLv + 1]}. Imaš ${m} $, možeš odmah da ga kupiš.`
+        : Tx`<b>Jači generator</b> košta ${c} $ (kapacitet ${GEN_CAP[S.genLv]} → ${GEN_CAP[S.genLv + 1]}), a imaš ${m} $.`,
+    can || top ? "" : S.loan > 0 ? Tx`<b>Banka:</b> već otplaćuješ kredit (dug ${S.loan} $), pa novi ne možeš da uzmeš.`
+        : Tx`<b>Nemaš dovoljno?</b> Banka daje kredit: ${LOAN_AMOUNT} $ odmah, a vraćaš ${LOAN_BACK} $ u ratama od ${LOAN_RATE} $ svake zore.` + (withLoan ? " " + Tx("Sa kreditom možeš odmah da kupiš generator.") : ""),
+    can ? Tx("<b>Druga rešenja</b>, ako ti treba još struje:") : Tx("<b>Ako ti je kredit skup</b>, ima i drugih rešenja:"),
+    Tx`<b>Štedljive i LED sijalice</b> troše upola manje struje od običnih (1 umesto 2). Najjeftinije rešenje: Štedljiva košta ${BULBS.st.cost} $.`,
+    S.unlocked ? Tx`<b>Solarni paneli</b> (${SOLAR_COST} $): +${SOLAR_CAP} struje i 30% jeftinija struja.` : Tx`<b>Solarni paneli</b> (${SOLAR_COST} $): +${SOLAR_CAP} struje, otključavaju se kad kupiš stari kvart.`,
+    Tx`<b>Trafostanica</b> (${TRAFO_COST[0]} $): +${TRAFO_CAP} struje, ali tek kad generator dođe do najjačeg nivoa.`,
+    Tx`<b>UPS baterija</b> (${UPS_COST} $): ne daje više struje, ali drži svetla ${UPS_SEC} sekundi kad generator štucne ili iskoči osigurač.`].filter(Boolean);
+  el.querySelector(".dn-notes").innerHTML = notes.map(t => `<li>${t}</li>`).join("");
+  gwWas = S.paused; S.paused = true; setPauseLabel(); el.hidden = false; SFX.outage(); save();
+}
+let gwWas = false;
+function genWarnClose(shop, go) {
+  $("genWarn").hidden = true; S.paused = gwWas; setPauseLabel();
+  const p = gwPend; gwPend = null;
+  if (go && p && !p.s.job) order(p.s, "install", p.m, p.cost, true);
+  if (!shop) return;
+  if (mq.matches) setShop(true); else setSide(false);
+  const b = $("upGen"); setTimeout(() => { b.scrollIntoView({block:"center", behavior:"smooth"}); b.classList.add("tut-hi"); setTimeout(() => b.classList.remove("tut-hi"), 5000); }, 300);
 }
 
 // ---------- "While you were away": a short report when the player comes back after 5+ minutes ----------
