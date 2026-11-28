@@ -881,11 +881,15 @@ function swapTag(s) {
   const m = bt ? combo(L.m.f.id, S.bulb) : tm || svcModel(L);
   return `${swapCost(L, m)} $ ${WEAR_TAG[lv]}`;
 }
+function swapShort(L, m = L.m) {   // the same, short enough to float over the lamp
+  const lv = wearLv(L), b = bulbCost(m), x = swapCost(L, m) - b;
+  return x < 0 ? Tx`${b} $ − ${-x} $ na vreme` : lv === 4 ? Tx`${b} $ + ${x} $ izgorela` : lv === 3 ? Tx`${b} $ + ${x} $ hitno` : Tx`${b} $ + ${x} $ kasno`;
+}
 function swapNote(L, m = L.m) {   // how a bulb swap price is made up, so 60 $ for a 40 $ bulb is never a surprise; "" when it is just the bulb
   const lv = wearLv(L), b = bulbCost(m), x = swapCost(L, m) - b;
   if (!x) return "";
-  return lv === 1 ? Tx`sijalica ${b} $, ${-x} $ popusta jer je menjaš na vreme` : lv === 2 ? Tx`sijalica ${b} $ + ${x} $ doplata za kasnu zamenu (ispod 20%)`
-    : lv === 3 ? Tx`sijalica ${b} $ + ${x} $ doplata za hitnu zamenu (ispod 15%)` : Tx`sijalica ${b} $ + ${x} $ doplata jer je izgorela`;
+  return lv === 1 ? Tx`sijalica ${b} $ − ${-x} $ jer je menjaš na vreme` : lv === 2 ? Tx`sijalica ${b} $ + ${x} $ jer je ispod 20%`
+    : lv === 3 ? Tx`sijalica ${b} $ + ${x} $ jer je ispod 15%` : Tx`sijalica ${b} $ + ${x} $ jer je izgorela`;
 }
 // Which bulb the service crew puts in when it replaces one (shop setting S.svcBulb). "auto": the same bulb, but a saver one while the generator is over 85%.
 const SVC_OPTS = ["auto", "same", "st", "led", "ob", "ja"];
@@ -992,10 +996,13 @@ function order(s, type, m, cost) {
   const note = type === "bulb" && s.lamp ? swapNote(s.lamp, m) : "";   // read before the job starts, while the old bulb is still in
   S.money -= cost; S.led.buy += cost; if (s === tmp) tmp = null;
   const j = {slot:s, type, m, assigned:false, wb:type === "repair" && s.lamp && s.lamp.life <= .05}; s.job = j; jobs.push(j);
-  float(s.x, s.y - 14, `−${cost} $`, "#ff9d8f");
+  const explain = note && !S.tips.surcharge;   // the surcharge is explained once, the first time it is paid; after that just the price
+  if (explain) float(s.x, s.y - 14, `−${cost} $ = ` + swapShort(s.lamp, m), "#ffb15c", true);   // right where the player looks: "−24 $ = 12 $ + 12 $ izgorela"
+  else float(s.x, s.y - 14, `−${cost} $`, "#ff9d8f");
   const [mood, why] = moodOf(s, m);
   const full = type === "install" && !s.lamp && m.power > genCap() * OVER_MAX - S.used;
-  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? (note ? Tx`Servis menja sijalicu: ${m.b.name}, ${cost} $ = ${note}.` : Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).`) : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
+  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).` : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
+  if (explain) tip("surcharge", Tx("Zašto je zamena skuplja?"), Tx`Zamena ${cost} $ = ${note}. Menjaj sijalice na vreme i plaćaćeš manje.`);
   save();
   SFX.buy();
   return j;
