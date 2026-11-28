@@ -870,6 +870,17 @@ const wearLv = L => { const p = Math.ceil(L.life * 100); return L.state === "bur
 const WEAR_F = [1, .8, 1.25, 1.5, 2], WEAR_COL = ["#9fe0b3", "#f1c453", "#ff9f43", "#ff6b5b", "#ff6b5b"];
 const wearName = lv => [Tx("dobra"), Tx("pazi, uskoro zamena"), Tx("zameni je"), Tx("hitna zamena"), Tx("izgorela")][lv];
 const swapCost = (L, m = L.m) => Math.ceil(bulbCost(m) * WEAR_F[wearLv(L)]);   // what a new bulb costs right now for this lamp
+// What a tap on this lamp would charge for a new bulb, for its badge: "24 $ ×2". Only for lamps that need one (and, with the
+// bulb tool in hand, for any worn one), so the surcharge is seen before the tap, not after.
+const WEAR_TAG = ["", "−20%", "+25%", "+50%", "×2"];
+function swapTag(s) {
+  const L = s.lamp; if (!L || s.job || L.state === "broken" || !avail(s)) return "";
+  const lv = wearLv(L), tm = toolModel(), bt = S.tool === "bulb";
+  if (lv < (bt ? 1 : 2)) return "";
+  if (tm && tm.f !== L.m.f) return "";   // a tap would put up a new fixture, not change the bulb
+  const m = bt ? combo(L.m.f.id, S.bulb) : tm || svcModel(L);
+  return `${swapCost(L, m)} $ ${WEAR_TAG[lv]}`;
+}
 function swapNote(L, m = L.m) {   // how a bulb swap price is made up, so 60 $ for a 40 $ bulb is never a surprise; "" when it is just the bulb
   const lv = wearLv(L), b = bulbCost(m), x = swapCost(L, m) - b;
   if (!x) return "";
@@ -1286,15 +1297,16 @@ function refreshTools() {
   for (const b of Object.values(BULBS)) {
     const el = $("tool-b-" + b.id);
     el.innerHTML = Tx`<span class="tool-top"><span class="ico">${ICONS[b.id]}</span><span class="pct">${Math.round(b.rf * 100)}%</span></span><span class="nm"><span class="long">Sijalica ${b.name}</span><span class="short">${BULB_SHORT[b.id]}</span></span><span class="pr">${b.cost} $</span>
-      <span class="tg">domet ${Math.round(b.rf * 100)}%</span><span class="rbar"><i style="width:${Math.round(b.rf / 1.2 * 100)}%"></i></span>
+      <span class="tg">domet ${Math.round(b.rf * 100)}% · izgorela ×2</span><span class="rbar"><i style="width:${Math.round(b.rf / 1.2 * 100)}%"></i></span>
       <span class="st">Struja ${b.power} · vek ${b.life}s. Izaberi, pa dodirni lampu na mapi: menja se samo sijalica, stub ostaje. Nove svetiljke takođe dobijaju ovu sijalicu.</span>`.replace(/<\/span>\s*$/, "<br>" + Tx("Zamena: na 40% veka 20% jeftinije, ispod 20% +25%, ispod 15% +50%, izgorela duplo.") + "</span>");
     el.setAttribute("aria-label", Tx`Sijalica ${b.name}, ${b.cost} $, domet ${Math.round(b.rf * 100)}%`); el.title = Tx`Sijalica ${b.name}`;
     el.setAttribute("aria-pressed", String(S.tool === "bulb" && S.bulb === b.id));
     el.classList.toggle("cur", S.tool !== "bulb" && S.bulb === b.id);
   }
 }
+const bulbRule = B => { const c = bulbCost({bulbCost:B.cost}); return Tx`Cena ${c} $, ali izgorela se plaća duplo (${Math.ceil(c * 2)} $), a ispod 15% veka ${Math.ceil(c * 1.5)} $. Cena je ispisana iznad lampe.`; };
 function pickBulb(id) {
-  S.bulb = id;SFX.click(); if (S.tool !== "bulb") setTool("bulb");  else { refreshTools(); const B = BULBS[id]; msg(Tx`Menjaš samo sijalicu: ${B.name}. Dodirni lampu na mapi.`); }
+  S.bulb = id;SFX.click(); if (S.tool !== "bulb") setTool("bulb");  else { refreshTools(); const B = BULBS[id]; msg(Tx`Menjaš samo sijalicu: ${B.name}. Dodirni lampu na mapi.` + " " + bulbRule(B)); }
   save();
 }
 function cycleBulb() { const ids = Object.keys(BULBS); pickBulb(ids[(ids.indexOf(S.bulb) + 1) % ids.length]); }
@@ -1306,7 +1318,7 @@ function setTool(id) {
   for (const F of Object.values(FIXTURES)) $("tool-" + F.id).setAttribute("aria-pressed", String(id === F.id));
   $("btnRef").setAttribute("aria-pressed", String(id === "ref")); refreshTools();
   if (id === "ref") tip("ref", Tx("Kako radi reflektor"), Tx("Dodirni mesto na mapi gde dolaze huligani. Svetli odmah do zore i tera ih, ali ne broji se u osvetljenost. Košta 10 $, najviše 5."));
-  if (id === "bulb") { const B = BULBS[S.bulb]; msg(Tx`Menjaš samo sijalicu: ${B.name}. Dodirni lampu na mapi. Stub ostaje isti.`); }
+  if (id === "bulb") { const B = BULBS[S.bulb]; msg(Tx`Menjaš samo sijalicu: ${B.name}. Dodirni lampu na mapi. Stub ostaje isti.` + " " + bulbRule(B)); }
   else if (id === "ref") msg(S.phase === "night" ? Tx("Reflektor: dodirni mesto gde se skupljaju huligani.") : Tx("Reflektori rade samo noću."), S.phase !== "night");
   else if (id) { const m = toolModel(); msg(Tx`${m.f.name} sa sijalicom ${m.b.name} (${m.kind === "park" ? Tx("za park") : Tx("za ulicu")}, ${m.tone} svetlo). Dodirni mesto na mapi.`); }
   else msg(Tx("Bez alata: dodir na lampu = info ili popravka."));
@@ -3318,6 +3330,7 @@ function render() {
     else if (L.state === "burnt") { txt = "0%"; col = "#ff6b5b"; }
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
     else { const lv = wearLv(L); txt = pct + "%" + (lv >= 3 ? "!" : ""); col = WEAR_COL[lv]; }
+    { const sw = swapTag(s); if (sw) txt += " · " + sw; }   // the price of a new bulb, surcharge included, shown before the tap
     if (L.state === "ok" && L.powered) { ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(s.x - 9, s.y + 7, 18, 2.5); ctx.fillStyle = col; ctx.fillRect(s.x - 9, s.y + 7, 18 * L.life, 2.5); }
     const mood = L.mood ?? moodOf(s, L.m)[0], bad = L.state !== "ok" || !L.powered || pct <= 20 || mood < 0;
     if (far && s !== keep) { if (!bad || !L.powered) continue;   // far out: no power is already on the top bar
