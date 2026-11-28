@@ -995,14 +995,15 @@ function order(s, type, m, cost) {
   if (S.money < cost) { msg(Tx`Nemaš dovoljno novca. Treba ${cost} $.`, true);SFX.err(); float(s.x, s.y - 14, Tx("Fali novca"), "#ff6b5b"); return; }
   const note = type === "bulb" && s.lamp ? swapNote(s.lamp, m) : "";   // read before the job starts, while the old bulb is still in
   S.money -= cost; S.led.buy += cost; if (s === tmp) tmp = null;
-  const j = {slot:s, type, m, assigned:false, wb:type === "repair" && s.lamp && s.lamp.life <= .05}; s.job = j; jobs.push(j);
+  const j = {slot:s, type, m, assigned:false, wb:type === "repair" && s.lamp && s.lamp.life <= .05, note, cost}; s.job = j; jobs.push(j);
   const explain = note && !S.tips.surcharge;   // the surcharge is explained once, the first time it is paid; after that just the price
   if (explain) float(s.x, s.y - 14, `−${cost} $ = ` + swapShort(s.lamp, m), "#ffb15c", true);   // right where the player looks: "−24 $ = 12 $ + 12 $ izgorela"
   else float(s.x, s.y - 14, `−${cost} $`, "#ff9d8f");
   const [mood, why] = moodOf(s, m);
   const full = type === "install" && !s.lamp && m.power > genCap() * OVER_MAX - S.used;
   msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).` : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
-  if (explain) tip("surcharge", Tx("Zašto je zamena skuplja?"), Tx`Zamena ${cost} $ = ${note}. Menjaj sijalice na vreme i plaćaćeš manje.`);
+  if (explain && tut) S.tips.surcharge = 1;   // in the intro the step card explains it and stays on screen
+  else if (explain) tip("surcharge", Tx("Zašto je zamena skuplja?"), Tx`Zamena ${cost} $ = ${note}. Menjaj sijalice na vreme i plaćaćeš manje.`);
   save();
   SFX.buy();
   return j;
@@ -3334,7 +3335,7 @@ function render() {
     const L = s.lamp, pct = Math.ceil(L.life * 100);
     let txt, col;
     if (L.state === "broken") { txt = Tx("razbijena"); col = "#ff6b5b"; }
-    else if (L.state === "burnt") { txt = "0%"; col = "#ff6b5b"; }
+    else if (L.state === "burnt") { txt = Tx("izgorela"); col = "#ff6b5b"; }   // a word, not "0%": the bulb is used up (a broken lamp says "razbijena")
     else if (!L.powered) { txt = Tx("bez struje"); col = "#8f98ae"; }
     else { const lv = wearLv(L); txt = pct + "%" + (lv >= 3 ? "!" : ""); col = WEAR_COL[lv]; }
     { const sw = swapTag(s); if (sw) txt += " · " + sw; }   // the price of a new bulb, surcharge included, shown before the tap
@@ -3765,7 +3766,7 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
   {el:"cv", t:Tx("Zameni sijalicu"), s:Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba."), act:true,
     enter:() => { const s0 = slots.find(s => s !== tut.br && s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; if (S.tool) setTool(null); s0.lamp.life = 0; s0.lamp.state = "burnt"; tut.bu = s0; S.money = Math.max(S.money, 60); },
     spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => !!tut.bu.job},
-  {el:"cv", t:Tx("Servis radi"), s:Tx("Kombi ide da zameni sijalicu. Sačekaj da lampa opet zasvetli."), act:true, run:true,
+  {el:"cv", t:Tx("Servis radi"), s:() => { const j = tut.bu && tut.bu.job; return Tx("Kombi ide da zameni sijalicu. Sačekaj da lampa opet zasvetli.") + (j && j.note ? " " + Tx`Zamena ${j.cost} $ = ${j.note}. Menjaj sijalice na vreme i plaćaćeš manje.` : ""); }, act:true, run:true,   // the surcharge is explained here, on the card that stays
     enter:() => { if (!tut.bu || !tut.bu.job) return false; },
     spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => tut.t > 60 || !tut.bu.job},
   {el:"cv", t:Tx("Dolazi huligan"), s:Tx("Gledaj levu ivicu: odatle iz bande dolazi huligan (crvene oči). Ide crvenim isprekidanim putevima i traži lampe da ih razbije kamenom."), run:true, hand:"watch",
@@ -3783,7 +3784,7 @@ function tutEnd() { tut = null; S.spawnT = Math.max(S.spawnT || 0, 8); $("tut").
 function tutShow() {
   let st = TUT[tut.i]; while (st.enter && st.enter() === false && !st.last) { tut.i++; st = TUT[tut.i]; } document.querySelectorAll(".tut-hi").forEach(e => e.classList.remove("tut-hi"));
   const el0 = $(st.el), el = el0 && (el0.closest(".chip") || el0); if (el && st.el !== "cv") el.classList.add("tut-hi");
-  $("tut").hidden = false; $("tutT").textContent = st.intro ? `⏸ ${st.t}` : `${tut.i}/${TUT.length - 1} · ${st.t}` + (st.wait || st.run ? "" : " · ⏸"); $("tutS").textContent = st.s; $("tutNext").textContent = st.last ? Tx("Kreni") : st.intro ? Tx("Pokaži mi") : Tx("Dalje"); $("tutSkip").textContent = st.intro ? Tx("Igram sam") : Tx("Preskoči"); tut.t = 0; tut.spot = null; tutPos();
+  $("tut").hidden = false; $("tutT").textContent = st.intro ? `⏸ ${st.t}` : `${tut.i}/${TUT.length - 1} · ${st.t}` + (st.wait || st.run ? "" : " · ⏸"); $("tutS").textContent = typeof st.s === "function" ? st.s() : st.s; $("tutNext").textContent = st.last ? Tx("Kreni") : st.intro ? Tx("Pokaži mi") : Tx("Dalje"); $("tutSkip").textContent = st.intro ? Tx("Igram sam") : Tx("Preskoči"); tut.t = 0; tut.spot = null; tutPos();
 }
 function tutHand() {   // the pointing hand: on the target button, or on the map spot to tap
   const st = TUT[tut.i], h = $("tutHand"); let x = null, y = null; h.className = "tut-hand" + (st.hand ? " " + st.hand : "");
