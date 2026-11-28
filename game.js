@@ -877,10 +877,16 @@ const WEAR_TAG = ["", "−20%", "+25%", "+50%", "×2"];
 function swapTag(s) {
   const L = s.lamp; if (!L || s.job || L.state === "broken" || !avail(s)) return "";
   const lv = wearLv(L), tm = toolModel(), bt = S.tool === "bulb";
+  const hov = S.hover && slotAt(S.hover, hitR()) === s, sel = S.sel === s && S.whyAt && performance.now() - S.whyAt < 4500;
+  if (!hov && !sel) return "";   // only the lamp under the mouse (or just tapped) shows its price, so 50 lamps are not 50 price tags
   if (lv < (bt ? 1 : 2)) return "";
   if (tm && tm.f !== L.m.f) return "";   // a tap would put up a new fixture, not change the bulb
   const m = bt ? combo(L.m.f.id, S.bulb) : tm || svcModel(L);
   return `${swapCost(L, m)} $ ${WEAR_TAG[lv]}`;
+}
+function wearTable() {   // when a new bulb is cheapest, for the intro: the prices of a regular bulb at each wear level
+  const c = WEAR_F.map(f => Math.ceil(BULBS.ob.cost * f));
+  return Tx`Obična sijalica: iznad 40% veka ${c[0]} $, od 40% do 20% samo ${c[1]} $ (tada je najjeftinije), ispod 20% ${c[2]} $, ispod 15% ${c[3]} $, a izgorela ${c[4]} $.`;
 }
 function swapShort(L, m = L.m) {   // the same, short enough to float over the lamp
   const lv = wearLv(L), b = bulbCost(m), x = swapCost(L, m) - b;
@@ -1314,7 +1320,7 @@ function refreshTools() {
     el.classList.toggle("cur", S.tool !== "bulb" && S.bulb === b.id);
   }
 }
-const bulbRule = B => { const c = bulbCost({bulbCost:B.cost}); return Tx`Cena ${c} $, ali izgorela se plaća duplo (${Math.ceil(c * 2)} $), a ispod 15% veka ${Math.ceil(c * 1.5)} $. Cena je ispisana iznad lampe.`; };
+const bulbRule = B => { const c = bulbCost({bulbCost:B.cost}); return Tx`Cena ${c} $, ali izgorela se plaća duplo (${Math.ceil(c * 2)} $), a ispod 15% veka ${Math.ceil(c * 1.5)} $.`; };
 function pickBulb(id) {
   S.bulb = id;SFX.click(); if (S.tool !== "bulb") setTool("bulb");  else { refreshTools(); const B = BULBS[id]; msg(Tx`Menjaš samo sijalicu: ${B.name}. Dodirni lampu na mapi.` + " " + bulbRule(B)); }
   save();
@@ -3039,7 +3045,7 @@ function spawnThief() {
   if (tut) return;
   if (!HINTS.thief) {   // the first thief on this device: a one-sentence tip (it used to be in the long intro)
     HINTS.thief = 1; S.tips.thief = 1; try { localStorage.setItem(HINT_KEY, JSON.stringify(HINTS)); } catch (e) {}
-    banner(Tx("Lopov u kvartu!"), Tx`Lopov (žute oči) obija mračne kuće i krade kola: uhvatiš ga svetlom ili dodirom i dobiješ +${THIEF.reward} $.`); SFX.honk();
+    banner(Tx("Lopov u kvartu!"), Tx`Lopov (žute oči) obija mračne kuće i krade kola: uhvatiš ga svetlom ili dodirom i dobiješ +${THIEF.reward} $.`); S.msgT = 15; SFX.honk();   // the first time the explanation stays in the message line longer than the card
     float(clamp(p.x, 30, W - 30), clamp(p.y, 30, by - 30), Tx("Lopov!"), "#ffd24a", true);
   } else {   // every thief gets a short warning, like the hooligans: a card, a sound and a sign where he comes in
     const from = ["zapada", "istoka", "severa", "juga"][side];
@@ -3050,7 +3056,7 @@ function spawnThief() {
 }
 function catchThief(t, how) {
   SFX.catch();
-  t.gone = true; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
+  t.gone = true; S.tips.thiefTag = 1; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
   S.money += prize; S.led.bounty += THIEF.reward; if (S.nst) S.nst.caught++; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
   burst(t.x, t.y, "#f1c453", 16, 80); float(t.x, t.y - 14, Tx`Lopov uhvaćen! +${prize} $`, "#7ed39a", true);
   msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : how === "patrol" ? Tx`Patrola je uhvatila lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
@@ -3409,6 +3415,13 @@ function render() {
   for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses and the badges, readable when zoomed out
     ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
     uprightAt(ctx, lx, ly, () => { const zf = Math.max(1, 1.1 / pxPerU()); ctx.translate(lx, ly); ctx.scale(zf, zf); ctx.translate(-lx, -ly); ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
+  for (const t of thieves) if (!t.gone) {   // a name tag above every thief, drawn with the badges so the dark does not hide it; the first one also says what to do
+    const lb = S.tips.thiefTag ? Tx("LOPOV") : Tx`LOPOV · dodirni ga +${THIEF.reward} $`, h = 22 * Math.max(1.5, 22 / (20 * pxPerU())) + 6;
+    ctx.font = "700 11px Barlow, sans-serif"; ctx.textAlign = "center"; const tw = ctx.measureText(lb).width + 12, ty = t.y + UPV.y * h, tx = t.x + UPV.x * h;
+    uprightAt(ctx, tx, ty, () => { ctx.fillStyle = "rgba(10,10,16,.88)"; ctx.beginPath(); ctx.roundRect(tx - tw / 2, ty - 12, tw, 16, 8); ctx.fill(); ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = "#ffd24a"; ctx.fillText(lb, tx, ty); });
+  }
+  ctx.font = "600 11px Barlow, sans-serif";
   { // Why are the residents unhappy? A bubble over a sad lamp: under the mouse, or for a few seconds after a tap (phones have no hover).
     const ws = (S.hover && slotAt(S.hover, hitR())) || (S.whyAt && performance.now() - S.whyAt < 4500 ? S.sel : null), L = ws && ws.lamp;
     if (L && avail(ws) && (L.mood ?? moodOf(ws, L.m)[0]) < 0) {
@@ -3538,13 +3551,16 @@ function drawGang() {
   const G = S.gang, now = performance.now();
   ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
   // zones the gang avoids
+  const zLab = [];
   for (const z of zones) {
     if (z.y > boundY()) continue;
     ctx.fillStyle = z.perm ? "rgba(126,211,154,.10)" : "rgba(126,211,154,.06)"; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 6.28); ctx.fill();
     ctx.strokeStyle = z.perm ? "rgba(126,211,154,.6)" : "rgba(126,211,154,.5)"; ctx.lineWidth = 1.5; ctx.setLineDash(z.perm ? [] : [5, 6]);
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 6.28); ctx.stroke(); ctx.setLineDash([]);
     ctx.font = "600 11px Barlow, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(8,10,20,.7)";
-    const t = z.perm ? Tx("banda se iselila") : Tx`zatvoreno za bandu · ${Math.max(1, z.until - S.night + (S.phase === "day" ? 0 : 1))} n.`, tw = ctx.measureText(t).width + 8;
+    const n = Math.max(1, z.until - S.night + (S.phase === "day" ? 0 : 1)), hv = S.hover && Math.hypot(S.hover.x - z.x, S.hover.y - z.y) < z.r;   // the full sentence only under the mouse; otherwise a short tag, and only one per spot
+    if (!hv && zLab.some(q => Math.hypot(q.x - z.x, q.y - z.y) < 60)) continue; zLab.push(z);
+    const t = z.perm ? (hv ? Tx("banda se iselila") : "🛡") : hv ? Tx`zatvoreno za bandu · ${n} n.` : `🛡 ${n} n.`, tw = ctx.measureText(t).width + 8;
     { const fs = ctx.fillStyle; uprightAt(ctx, z.x, z.y + z.r, () => { ctx.fillStyle = fs; ctx.fillRect(z.x - tw / 2, z.y + z.r - 16, tw, 14); ctx.fillStyle = "#9fe0b3"; ctx.fillText(t, z.x, z.y + z.r - 5); }); }
   }
   if (!G.gone) {
@@ -3829,7 +3845,7 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
   {el:"cv", t:Tx("Postavi lampu"), s:Tx("Dodirni mesto koje pokazuje ruka."), act:true, spot:() => { const m = toolModel(); if (!m) return null; if (!tut.spot) { const b = bestSpot(m); tut.spot = b ? {x:b.x, y:b.y} : null; } return tut.spot; }, done:() => !!S.pending || jobs.some(j => j.type === "install")},
   {el:"cv", t:Tx("Pogledaj krug"), s:Tx("Krug pokazuje dokle će lampa svetleti. Dodirni isto mesto još jednom ili dugme Postavi."), act:true, spot:() => S.pending ? {x:S.pending.x, y:S.pending.y} : tut.spot, done:() => jobs.some(j => j.type === "install")},
   {el:"cv", t:Tx("Servis radi"), s:Tx("Servisni kombi vozi do lampi i montira ih. Sačekaj da stigne."), act:true, run:true, spot:() => { const j = jobs.find(j => j.type === "install"); return j && j.slot ? {x:j.slot.x, y:j.slot.y} : null; }, done:() => tut.t > 60 || !jobs.some(j => j.type === "install")},
-  {el:"cv", t:Tx("Zameni sijalicu"), s:Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba."), act:true,
+  {el:"cv", t:Tx("Zameni sijalicu"), s:() => Tx("Ova lampa je izgorela: sijalica se potrošila i lampa je siva. Dodirni je i servis stavlja novu sijalicu, bez novog stuba.") + " " + wearTable(), act:true,
     enter:() => { const s0 = slots.find(s => s !== tut.br && s.lamp && s.lamp.state === "ok" && !s.job && avail(s)); if (!s0) return false; if (S.tool) setTool(null); s0.lamp.life = 0; s0.lamp.state = "burnt"; tut.bu = s0; S.money = Math.max(S.money, 60); },
     spot:() => tut.bu ? {x:tut.bu.x, y:tut.bu.y} : null, done:() => !!tut.bu.job},
   {el:"cv", t:Tx("Servis radi"), s:() => { const j = tut.bu && tut.bu.job; return Tx("Kombi ide da zameni sijalicu. Sačekaj da lampa opet zasvetli.") + (j && j.note ? " " + Tx`Zamena ${j.cost} $ = ${j.note}. Menjaj sijalice na vreme i plaćaćeš manje.` : ""); }, act:true, run:true,   // the surcharge is explained here, on the card that stays
