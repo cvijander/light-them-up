@@ -1015,7 +1015,7 @@ function preview(s, tool, direct) {
   msg(Tx`Radar: +${coverGain(s, tool)}% svetla. ${why} ${s.lamp ? "" : Tx("Prevuci prstom ili strelicama, pa Postavi.")}`, mood < 0); return true;
 }
 function tapSlot(s, direct) {
-  S.sel = s;
+  S.sel = s; S.whyAt = performance.now();   // a sad lamp shows why for a few seconds
   if (S.addon) { applyAddon(s); return; }
   if (s.plot && !S.unlocked) { S.pending = null; msg(Tx`Ovo je stari kvart. Kupi ga u Prodavnici (${PLOT_COST} $).`, true); return; }
   if (s.job) { S.pending = null; msg(Tx("Servis je već zakazan za ovo mesto.")); return; }
@@ -3357,6 +3357,20 @@ function render() {
   for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses and the badges, readable when zoomed out
     ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
     uprightAt(ctx, lx, ly, () => { const zf = Math.max(1, 1.1 / pxPerU()); ctx.translate(lx, ly); ctx.scale(zf, zf); ctx.translate(-lx, -ly); ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
+  { // Why are the residents unhappy? A bubble over a sad lamp: under the mouse, or for a few seconds after a tap (phones have no hover).
+    const ws = (S.hover && slotAt(S.hover, hitR())) || (S.whyAt && performance.now() - S.whyAt < 4500 ? S.sel : null), L = ws && ws.lamp;
+    if (L && avail(ws) && (L.mood ?? moodOf(ws, L.m)[0]) < 0) {
+      const why = moodOf(ws, L.m)[1] || Tx("Stanarima se ova lampa ne sviđa."); ctx.font = "500 10px Barlow, sans-serif"; ctx.textAlign = "left";
+      const lines = []; let ln = ""; for (const w of why.split(" ")) { const t = ln ? ln + " " + w : w; if (ctx.measureText(t).width > 150 && ln) { lines.push(ln); ln = w; } else ln = t; } if (ln) lines.push(ln);
+      const head = Tx("Zašto su stanari tužni?"), bw = Math.max(...lines.map(l => ctx.measureText(l).width), ctx.measureText(head).width + 4) + 14, bh = 18 + lines.length * 12, top = ws.y - 30 - LPH(ws) - bh;
+      uprightAt(ctx, ws.x, ws.y, () => { const zf = Math.max(1, 1.1 / pxPerU()); ctx.translate(ws.x, ws.y); ctx.scale(zf, zf); ctx.translate(-ws.x, -ws.y);
+        const x0 = ws.x - bw / 2; ctx.fillStyle = "rgba(14,16,28,.94)"; ctx.strokeStyle = "#ff8a7a"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.roundRect(x0, top, bw, bh, 7); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ws.x - 5, top + bh); ctx.lineTo(ws.x, top + bh + 6); ctx.lineTo(ws.x + 5, top + bh); ctx.fill();
+        ctx.fillStyle = "#ff8a7a"; ctx.font = "700 10px Barlow, sans-serif"; ctx.fillText(head, x0 + 7, top + 12);
+        ctx.fillStyle = "#eef0f6"; ctx.font = "500 10px Barlow, sans-serif"; lines.forEach((l, i) => ctx.fillText(l, x0 + 7, top + 25 + i * 12)); });
+      ctx.textAlign = "center"; ctx.font = "600 11px Barlow, sans-serif";
+    }
+  }
   // radar preview
   const hov = S.hover && slotAt(S.hover, hitR());
   const target = S.tool ? S.pending || hov : hov || S.sel;

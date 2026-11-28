@@ -121,6 +121,11 @@ Object.assign(I18N.en, {"Zašto je zamena skuplja?": "Why does this replacement 
 Object.assign(I18N.de, {"Zašto je zamena skuplja?": "Warum ist der Wechsel teurer?", "Zamena {0} $ = {1}. Menjaj sijalice na vreme i plaćaćeš manje.": "Wechsel {0} $ = {1}. Wechsle Glühbirnen rechtzeitig, dann zahlst du weniger."});
 Object.assign(I18N.es, {"Zašto je zamena skuplja?": "¿Por qué este cambio cuesta más?", "Zamena {0} $ = {1}. Menjaj sijalice na vreme i plaćaćeš manje.": "Cambio {0} $ = {1}. Cambia las bombillas a tiempo y pagarás menos."});
 Object.assign(I18N.el, {"Zašto je zamena skuplja?": "Γιατί αυτή η αλλαγή κοστίζει περισσότερο;", "Zamena {0} $ = {1}. Menjaj sijalice na vreme i plaćaćeš manje.": "Αλλαγή {0} $ = {1}. Άλλαζε τις λάμπες έγκαιρα και θα πληρώνεις λιγότερο."});
+// Sad lamp bubble
+Object.assign(I18N.en, {"Zašto su stanari tužni?": "Why are residents unhappy?", "Stanarima se ova lampa ne sviđa.": "Residents don't like this lamp."});
+Object.assign(I18N.de, {"Zašto su stanari tužni?": "Warum sind die Bewohner unzufrieden?", "Stanarima se ova lampa ne sviđa.": "Den Bewohnern gefällt diese Lampe nicht."});
+Object.assign(I18N.es, {"Zašto su stanari tužni?": "¿Por qué están descontentos los vecinos?", "Stanarima se ova lampa ne sviđa.": "A los vecinos no les gusta esta farola."});
+Object.assign(I18N.el, {"Zašto su stanari tužni?": "Γιατί είναι δυσαρεστημένοι οι κάτοικοι;", "Stanarima se ova lampa ne sviđa.": "Στους κατοίκους δεν αρέσει αυτή η λάμπα."});
 function trS(x) {
   if (LANG === "sr" || typeof x !== "string") return x;
   const m = x.match(/^(\s*)([\s\S]*?)(\s*)$/), t = I18N[LANG][m[2]] ?? I18V[LANG][m[2]];
