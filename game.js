@@ -1078,7 +1078,7 @@ function patrolTick(P, dt) {
     P.reT -= dt; if (P.reT <= 0) { P.reT = .8; P.path = route(onStreet(P), onStreet(t)); if (MAP || dist(onStreet(t), t) > 2) P.path.push({x:t.x, y:t.y}); }   // he keeps moving: look again every moment
   }
   // the driving
-  let st = PATROL.speed * dt;
+  let st = PATROL.speed * dt * (P.tf ?? 1);
   while (st > 0 && P.path.length) {
     const q = P.path[0], dx = q.x - P.x, dy = q.y - P.y, d = Math.hypot(dx, dy);
     if (d < .5) { P.x = q.x; P.y = q.y; P.path.shift(); continue; }
@@ -2293,6 +2293,7 @@ function step(dt) {
   } else { S.inc = S.dayRate; S.money += S.dayRate * dt; S.led.pay += S.dayRate * dt; }
   // jobs & vans
   const spd = 92 * SPEED_MULT[S.speedLv] * (S.phase === "day" ? 1.2 : 1) * (S.phase === "night" && S.weather === "snow" ? .8 : 1);   // a bit faster than traffic, not flying past it
+  keepDistance(dt);   // every vehicle brakes behind the one in front, cars pull aside for the service van and the patrol
   for (const v of vans) {
     if (!v.job) {
       const free = jobs.filter(j => !j.assigned);
@@ -2302,7 +2303,7 @@ function step(dt) {
       } else if (v.state !== "home" && v.state !== "return") { v.path = vanBack(v); v.state = "return"; }
     }
     if (v.state === "drive" || v.state === "return") {
-      let st = spd * dt;
+      let st = spd * dt * (v.tf ?? 1);
       if (v.path.length && v.va != null) { const q = v.path[0], d = Math.atan2(q.y - v.y, q.x - v.x) - v.va; const dd = Math.atan2(Math.sin(d), Math.cos(d)); if (Math.hypot(q.x - v.x, q.y - v.y) > 2 && Math.abs(dd) > 1.2) { st = 0; v.ang = v.va + dd; v.va += Math.sign(dd) * Math.min(Math.abs(dd), 4 * dt); } }   // a sharp turn (leaving the depot, U-turn): turn on the spot first, don't spin while driving. It turns here in the simulation (it used to wait for the drawing, and a van whose heading never changed stood still forever)
       while (st > 0 && v.path.length) {
         const q = v.path[0], dx = q.x - v.x, dy = q.y - v.y, d = Math.hypot(dx, dy);
@@ -2397,7 +2398,9 @@ function updateTraffic(dt) {
   for (const c of traffic) {
     const night = S.phase === "night", lit = !night || litAt(c.x, c.y, LIGHT_K);
     c.dark = night && !lit;
-    const sp = c.sp * (c.dark ? .6 : 1) * dt;
+    const sp = c.sp * (c.dark ? .6 : 1) * dt * (c.tf ?? 1);
+    { const t = (c.dodgeT || 0) > 0 ? c.dodgeS * 6 : 0, o = c.dz || 0, n = o + clamp(t - o, -25 * dt, 25 * dt); c.dodgeT = Math.max(0, (c.dodgeT || 0) - dt); c.dz = n;   // pull aside (to the kerb) and back into the lane
+      if (c.path) c.lane = 6 + n; else if (c.vert) c.x -= c.dir * (n - o); else c.y += c.dir * (n - o); }
     if (c.path) movePath(c, sp); else if (c.vert) c.y += sp * c.dir; else c.x += sp * c.dir;
     if (night) { c.n++; if (lit) c.lit++; }
     if (c.type === "police" && S.phase === "night") for (const h of hoods) if (h.state !== "flee" && Math.hypot(h.x - c.x, h.y - c.y) < 60 && scare(h)) { S.money += 3; S.led.bounty += 3; float(h.x, h.y - 14, Tx("Policija! +3 $"), "#7ed39a", true); }
@@ -2411,6 +2414,49 @@ function updateTraffic(dt) {
     }
   }
   traffic = traffic.filter(c => !c.gone);
+}
+// ---------- Keeping distance: no vehicle drives through another ----------
+// Each moving vehicle looks ahead along its heading. Another vehicle in front of it (in its lane, or crossing it) makes it brake,
+// down to a stop a little behind it. Ordinary cars make room for the service van and the patrol: they pull aside to the kerb,
+// so the van behind them or coming at them can pass. Nothing waits forever: a vehicle stuck for a few seconds squeezes past.
+const VSZ = {van:14, police:10, truck:15, bus:21, small:8.4, wagon:11};
+let VUID = 0;
+const vOff = o => { const z = o.dz || 0, a = o.ang || 0; return {x:o.x - Math.sin(a) * z, y:o.y + Math.cos(a) * z}; };   // where the van or patrol is drawn: off the middle of the street while it passes another one
+function shiftV(k) { for (const o of [...vans, S.patrol]) if (o && o.dz) { const a = o.ang || 0; o.x -= k * Math.sin(a) * o.dz; o.y += k * Math.cos(a) * o.dz; } }
+function vHL(kind) { const L0 = kind === "van" && S.crane ? 16 : VSZ[kind] || 10; return L0 * 1.3 * vSize(L0 * 1.3); }   // half length as drawn
+function keepDistance(dt) {
+  const M = [];
+  for (const c of traffic) M.push({o:c, car:true, x:c.x, y:c.y, a:c.path ? c.ang : c.vert ? (c.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (c.dir > 0 ? 0 : Math.PI), hl:vHL(CAR_KIND[c.type] || "car"), pri:1, mv:true});
+  for (const v of vans) if (v.state !== "home") M.push({o:v, ...vOff(v), a:v.ang || 0, hl:vHL("van"), pri:2, mv:v.state === "drive" || v.state === "return"});
+  if (S.patrol) M.push({o:S.patrol, ...vOff(S.patrol), a:S.patrol.ang || 0, hl:vHL("police"), pri:3, mv:true});
+  for (const m of M) { if (!m.o.uid) m.o.uid = ++VUID; m.c = Math.cos(m.a); m.s = Math.sin(m.a); }
+  const rel = (m, n) => { const dx = n.x - m.x, dy = n.y - m.y; return [dx * m.c + dy * m.s, -dx * m.s + dy * m.c]; };   // along, sideways (+ = right)
+  const sees = (m, n) => { const [al, lat] = rel(m, n); return al > 0 && al < m.hl + n.hl + (m.pri > 2 ? 70 : 40) && Math.abs(lat) < 9 ? al - m.hl - n.hl : null; };
+  const over = (m, n) => m.pri !== n.pri ? m.pri > n.pri : m.o.uid < n.o.uid;   // who goes first when two block each other
+  for (const m of M) {
+    const o = m.o; let f = 1, mutual = false;
+    o.ghostT = Math.max(0, (o.ghostT || 0) - dt);
+    if (m.mv && !o.ghostT) for (const n of M) {
+      if (n === m || n.o.ghostT) continue;
+      const g = sees(m, n); if (g == null) continue;
+      if (m.car !== !!n.car && (m.car ? n : m).pri > 1) {   // a car and the van or the patrol: the car makes room, on the side away from it
+        const car = m.car ? m : n, big = m.car ? n : m, lat = rel(car, big)[1];
+        car.o.dodgeT = .9; car.o.dodgeS = lat > 0 ? -1 : 1;
+      }
+      const back = sees(n, m) != null && n.mv;
+      if (!m.car && !n.car) {   // van or patrol meets another one (they drive in the middle of the street): keep right to pass one coming at it, swing out to pass one standing or crawling
+        const head = m.c * n.c + m.s * n.s < -.5;
+        if (head) { o.dodgeT = .9; o.dodgeS = 7; }
+        else if (!n.mv || (o.bT || 0) > .8) { o.dodgeT = 1.2; o.dodgeS = -11; }
+      }
+      if (back) { if (over(m, n)) { if (Math.abs(m.c * n.c + m.s * n.s) < .5) continue; } else mutual = true; }   // both in each other's way: at a crossing the first one goes; nose to nose both brake (a car pulls aside) and the other one gives way first
+      f = Math.min(f, clamp((g - 2) / (m.pri > 2 ? 40 : 20), 0, 1));
+    }
+    o.tf = f;
+    if (!m.car) { const t = (o.dodgeT || 0) > 0 ? o.dodgeS : 0, z = o.dz || 0; o.dz = z + clamp(t - z, -22 * dt, 22 * dt); o.dodgeT = Math.max(0, (o.dodgeT || 0) - dt); }   // eased: it steers aside, it doesn't jump
+    o.bT = f < .25 ? (o.bT || 0) + dt : Math.max(0, (o.bT || 0) - dt * 2);
+    if (o.bT > (mutual ? 1.2 : 3.5)) { o.bT = 0; o.ghostT = 1.6; o.tf = 1; }   // stuck: squeeze past instead of standing there forever
+  }
 }
 // Vehicles as real little boxes: each part is a box turned along the street. Only the walls that face the viewer are drawn,
 // lit by the same light as the buildings (light from the upper left, shadow down right), so they look right in both views and all 4 directions.
@@ -3371,6 +3417,7 @@ function render() {
   }
   drawSeats(); drawPeds(); drawStrays(); drawMoths();
   drawTraffic();
+  shiftV(1);   // draw vans and the patrol where they steer aside, then put them back on their route
   for (const v of vans) drawVan(v);
   if (S.patrol) {
     const P = S.patrol; drawVehicle(P, P.x, P.y, P.ang, "police", "#eef1f6", S.phase === "night" ? "on" : "off");   // the patrol is a 3D police car with a flashing light bar
@@ -3379,6 +3426,7 @@ function render() {
     if (v.state === "work") { const onb = (performance.now() / 250 | 0) % 2; ctx.fillStyle = onb ? "#ffb02e" : "#7a4b0a"; ctx.shadowColor = "#ffb02e"; ctx.shadowBlur = onb ? 10 : 0; ctx.beginPath(); ctx.arc(v.x, v.y, 3, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0; }
     if (v.state === "drive" || v.state === "return") { const bx = v.x - Math.cos(v.ang) * 12, by = v.y - Math.sin(v.ang) * 12; ctx.fillStyle = "#ff3b30"; ctx.fillRect(bx - 1.5, by - 1.5, 3, 3); }
   }
+  shiftV(-1);
   for (const p of parts) { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, p.sz, p.sz); }
   ctx.globalAlpha = 1;
 
@@ -3686,7 +3734,7 @@ for (const id of ["upGen", "upGenFix", "upVan", "upSpeed", "upPlot", "upPatrol"]
 setInterval(() => { if (S.started && !S.paused) save(); }, 4000);
 window.__game = {freeSpot, yardOk, PARKS, MSEG, XS, get MAP() { return MAP; }, spawnThief, CARS, get thieves() { return thieves; }, S, slots, houses, FIXTURES, BULBS, ROUTES, combo, computeCover, moodOf, districtTone, step, routeOpen, spawnHood, scare, tapSlot, save, readSave, load,
   view: () => ({VZ, VX, VY, VSH:VSH(), VH:VH(), W, cssW, PW:pbox().w, ISO}), proj, toWorld, cv2scr, scr2cv, setView: (z, x, y) => setView(z, x, y),
-  get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }, get vans() { return vans; }};
+  get hoods() { return hoods; }, get zones() { return zones; }, get jobs() { return jobs; }, get traffic() { return traffic; }, get peds() { return peds; }, get vans() { return vans; }, addVan, spawnCar, startPatrol};
 
 
 // ---------- Map zoom (every map): two fingers pinch and move, one finger or the mouse moves the map, mouse wheel, + − and ⤢ ----------
