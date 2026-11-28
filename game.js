@@ -17,9 +17,9 @@ const MAPSEL = (() => { try { const v = localStorage.getItem("lightThemUp.map") 
 const MAP = MAPSEL >= 0 && BQ.q[MAPSEL] ? BQ.q[MAPSEL] : null;
 
 const FIXTURES = {
-  ul: {id:"ul", key:"1", short:Tx("Ulična LED"), name:Tx("Ulična LED"), kind:"ulica", style:"moderna", tone:"hladno", r:120, cost:25, repair:8, armor:1.8, col:[200,225,255], css:"var(--pro)"},
-  kl: {id:"kl", key:"2", short:Tx("Klasični"), name:Tx("Klasični stub"), kind:"ulica", style:"klasična", tone:"toplo", r:105, cost:25, repair:8, armor:1.3, col:[255,186,100], css:"var(--sodium)"},
-  fe: {id:"fe", key:"3", short:Tx("Fenjer"), name:Tx("Fenjer"), kind:"park", style:"klasična", tone:"toplo", r:95, cost:20, repair:6, armor:1.0, col:[255,205,135], css:"var(--fen)"},
+  ul: {id:"ul", key:"1", short:Tx("Ulična LED"), name:Tx("Ulična LED"), kind:"ulica", style:"moderna", tone:"hladno", r:120, cost:25, repair:15, armor:1.8, col:[200,225,255], css:"var(--pro)"},
+  kl: {id:"kl", key:"2", short:Tx("Klasični"), name:Tx("Klasični stub"), kind:"ulica", style:"klasična", tone:"toplo", r:105, cost:25, repair:15, armor:1.3, col:[255,186,100], css:"var(--sodium)"},
+  fe: {id:"fe", key:"3", short:Tx("Fenjer"), name:Tx("Fenjer"), kind:"park", style:"klasična", tone:"toplo", r:95, cost:20, repair:12, armor:1.0, col:[255,205,135], css:"var(--fen)"},
 };
 
 const SFX = (() => {
@@ -901,7 +901,7 @@ function svcModel(L) {
   if (id === "auto" && L.m.b.power > 1 && S.load > .85) return combo(L.m.f.id, "st");
   return L.m;
 }
-const fixCost = L => L.state === "broken" ? repairCost(L.m) + (L.life <= .05 ? bulbCost(L.m) : 0) : swapCost(L, svcModel(L));
+const fixCost = L => L.state === "broken" ? repairCost(L.m) + bulbCost(L.m) : swapCost(L, svcModel(L));   // a smashed lamp: the post is repaired and a new bulb always goes in, so it costs more than a burnt bulb
 let wearMsgT = 0;
 function wearWarn(s, lv) {
   const L = s.lamp, c = swapCost(L);
@@ -997,13 +997,13 @@ function order(s, type, m, cost, force) {
   if (S.money < cost) { msg(Tx`Nemaš dovoljno novca. Treba ${cost} $.`, true);SFX.err(); float(s.x, s.y - 14, Tx("Fali novca"), "#ff6b5b"); return; }
   const note = type === "bulb" && s.lamp ? swapNote(s.lamp, m) : "";   // read before the job starts, while the old bulb is still in
   S.money -= cost; S.led.buy += cost; if (s === tmp) tmp = null;
-  const j = {slot:s, type, m, assigned:false, wb:type === "repair" && s.lamp && s.lamp.life <= .05, note, cost}; s.job = j; jobs.push(j);
+  const j = {slot:s, type, m, assigned:false, wb:type === "repair", note, cost}; s.job = j; jobs.push(j);
   const explain = note && !S.tips.surcharge;   // the surcharge is explained once, the first time it is paid; after that just the price
   if (explain) float(s.x, s.y - 14, `−${cost} $ = ` + swapShort(s.lamp, m), "#ffb15c", true);   // right where the player looks: "−24 $ = 12 $ + 12 $ izgorela"
   else float(s.x, s.y - 14, `−${cost} $`, "#ff9d8f");
   const [mood, why] = moodOf(s, m);
   const full = type === "install" && !s.lamp && m.power > genCap() * OVER_MAX - S.used;
-  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).` : Tx`Servis ide da popravi svetiljku (${cost} $).`, type === "install" && (mood < 0 || full));
+  msg(type === "install" ? Tx`${m.name}: servis kreće na montažu. ${full ? Tx("Pazi: generator je pun, lampa neće svetleti dok ne kupiš jači generator.") : mood < 0 ? Tx("Pazi: ") + why : ""}` : type === "bulb" ? Tx`Servis menja sijalicu: ${m.b.name} (${cost} $).` : Tx`Popravka ${cost} $ = stub ${repairCost(m)} $ + sijalica ${bulbCost(m)} $.`, type === "install" && (mood < 0 || full));
   if (explain && tut) S.tips.surcharge = 1;   // in the intro the step card explains it and stays on screen
   else if (explain) tip("surcharge", Tx("Zašto je zamena skuplja?"), Tx`Zamena ${cost} $ = ${note}. Menjaj sijalice na vreme i plaćaćeš manje.`);
   save();
@@ -2770,7 +2770,7 @@ function fixAll() {
   for (const f of list) {
     if (S.money < f.cost) break;
     S.money -= f.cost; S.led.buy += f.cost; spent += f.cost; n++;
-    const j = {slot:f.s, type:f.type, m:f.type === "bulb" ? svcModel(f.s.lamp) : f.s.lamp.m, assigned:false, wb:f.type === "repair" && f.s.lamp.life <= .05}; f.s.job = j; jobs.push(j);
+    const j = {slot:f.s, type:f.type, m:f.type === "bulb" ? svcModel(f.s.lamp) : f.s.lamp.m, assigned:false, wb:f.type === "repair"}; f.s.job = j; jobs.push(j);
   }
   if (!n) { msg(Tx`Nemaš dovoljno novca ni za prvu popravku (${list[0].cost} $).`, true); SFX.err(); return; }
   SFX.buy(); msg(n < list.length ? Tx`Servis kreće na ${n} od ${list.length} lampi (−${spent} $). Za ostale fali novca.` : Tx`Servis kreće na sve lampe: ${n} (−${spent} $).`, n < list.length); save();
@@ -2870,8 +2870,8 @@ function awayReport(t0) {
   let fixed = 0, fixCost = 0;
   if (S.dispatch && !S.dispOff || Object.keys(S.mgr || {}).length) {
     const todo = slots.filter(s => s.lamp && !s.job && avail(s) && (s.lamp.state === "broken" || s.lamp.state === "burnt") && (S.dispatch && !S.dispOff || mgrHas(s))).map(s => {
-      const L = s.lamp, c = Math.ceil((L.state === "broken" ? L.m.repair + (L.life <= .05 ? L.m.bulbCost : 0) : L.m.bulbCost) * .5); return {s, c}; }).sort((a, b) => a.c - b.c);
-    for (const {s, c} of todo) { if (S.money < c) break; S.money -= c; fixCost += c; fixed++; const L = s.lamp; if (L.state === "broken" && L.life > .05) L.state = "ok"; else { L.life = 1; L.state = "ok"; } L.hp = LAMP_HP; }
+      const L = s.lamp, c = Math.ceil((L.state === "broken" ? L.m.repair + L.m.bulbCost : L.m.bulbCost) * .5); return {s, c}; }).sort((a, b) => a.c - b.c);
+    for (const {s, c} of todo) { if (S.money < c) break; S.money -= c; fixCost += c; fixed++; const L = s.lamp; L.life = 1; L.state = "ok"; L.hp = LAMP_HP; }
   }
   const el = $("away"); if (!el) return;
   const h = Math.floor(secs / 3600), mi = Math.floor(secs % 3600 / 60);
@@ -3838,7 +3838,7 @@ const TUT = [   // one thing at a time; the bulb row and the reflector stay hidd
   {el:"cv", t:Tx("Dolazi huligan"), s:Tx("Gledaj levu ivicu: odatle iz bande dolazi huligan (crvene oči). Ide crvenim isprekidanim putevima i traži lampe da ih razbije kamenom."), run:true, hand:"watch",
     enter:() => { for (const o of hoods) if (o.state !== "flee") scare(o, true); const h = spawnHood(); if (!h) return false; tut.h = h; S.flashCd = 0; },
     spot:() => tut.h && tut.h.state !== "flee" && hoods.includes(tut.h) ? {x:Math.max(12, tut.h.x), y:tut.h.y} : null, done:() => tut.t > 6 || tut.h.state === "flee" || !hoods.includes(tut.h)},
-  {el:"cv", t:Tx("Oteraj huligana"), s:Tx("Sad ga dodirni: baterijom ga oteraš i dobiješ 5 $. Tuda neko vreme neće prolaziti."), act:true, hand:"char",
+  {el:"cv", t:Tx("Oteraj huligana"), s:() => Tx("Sad ga dodirni: baterijom ga oteraš i dobiješ 5 $. Tuda neko vreme neće prolaziti.") + " " + Tx`Razbijenu lampu servis popravlja: stub ${FIXTURES.kl.repair} $ + nova sijalica ${BULBS.ob.cost} $ = ${FIXTURES.kl.repair + BULBS.ob.cost} $. Zato ih teraj na vreme!`,   // stays until he is chased off, so there is time to read it act:true, hand:"char",
     enter:() => { const h = tut.h; if (!h || h.state === "flee" || !hoods.includes(h)) return false; S.flashCd = 0;
       if (h.x < 30 || h.x > W - 30 || h.y < 30 || h.y > boundY() - 30) { const k = h.path.findIndex((q, i) => i >= h.i && q.x > 40 && q.x < W - 40 && q.y > 40 && q.y < boundY() - 40); if (k >= 0) { h.i = k; h.x = h.path[k].x; h.y = h.path[k].y; } } },
     spot:() => tut.h && tut.h.state !== "flee" ? {x:tut.h.x, y:tut.h.y} : null, done:() => tut.h.state === "flee" || !hoods.includes(tut.h)},
