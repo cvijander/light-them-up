@@ -3100,9 +3100,13 @@ function spawnThief() {
     SFX.honk(); float(clamp(p.x, 30, W - 30), clamp(p.y, 30, by - 30), Tx("Lopov!"), "#ffd24a", true);
   }
 }
+function firstThiefDone() {   // after the first thief (caught or gone): no more name tags, and one short tip about the helpers
+  if (S.tips.thiefTag) return; S.tips.thiefTag = 1;
+  setTimeout(() => { tip("helpers", Tx("Pomoć protiv lopova i huligana"), Tx`Patrola (u Prodavnici, ${PATROL.cost} $) obiđe kvart i tera lopove i huligane. Reflektor (dugme dole, ${REF.cost} $) osvetli jedno mračno mesto: lopova u tom svetlu uhvatiš, a huligani beže.`); S.msgT = 12; }, 2500);   // after the catch message, not over it
+}
 function catchThief(t, how) {
   SFX.catch();
-  t.gone = true; S.tips.thiefTag = 1; recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
+  t.gone = true; firstThiefDone(); recInc("thieves"); dailyInc("thief"); const prize = THIEF.reward + t.loot;
   S.money += prize; S.led.bounty += THIEF.reward; if (S.nst) S.nst.caught++; misProg("thief"); if (t.loot) S.led.theft = Math.max(0, S.led.theft - t.loot);
   burst(t.x, t.y, "#f1c453", 16, 80); float(t.x, t.y - 14, Tx`Lopov uhvaćen! +${prize} $`, "#7ed39a", true);
   msg(how === "tap" ? Tx`Uhvatio si lopova! +${prize} $` : how === "patrol" ? Tx`Patrola je uhvatila lopova! +${prize} $` : Tx`Svetlo je otkrilo lopova, uhvaćen je! +${prize} $`);
@@ -3127,7 +3131,7 @@ function updateThief(t, dt) {
     }
   } else if (t.state === "flee") {
     moveTo(t, t.exit.x, t.exit.y, t.sp * 1.5, dt);
-    if (t.x < -10 || t.x > W + 10 || t.y < -10 || t.y > boundY() + 10) t.gone = true;
+    if (t.x < -10 || t.x > W + 10 || t.y < -10 || t.y > boundY() + 10) { t.gone = true; firstThiefDone(); }
   }
 }
 function spawnHood(rev) {
@@ -3463,8 +3467,8 @@ function render() {
   for (const k in ZONES2) { const z = ZONES2[k], r = z.r, own = S[z.key];   // zone names, above the houses and the badges, readable when zoomed out
     ctx.font = "700 12px Barlow Condensed, sans-serif"; ctx.textAlign = "center"; const t = k === "ind" ? (own ? Tx("INDUSTRIJA") : Tx`Industrija ${z.cost} $`) : own ? z.name.toUpperCase() : `${z.name} · ${z.cost} $`, tw = ctx.measureText(t).width + 8, [lx, ly] = zoneLabelAt(k, r, tw);
     uprightAt(ctx, lx, ly, () => { const zf = Math.max(1, 1.1 / pxPerU()); ctx.translate(lx, ly); ctx.scale(zf, zf); ctx.translate(-lx, -ly); ctx.fillStyle = "rgba(8,10,20,.78)"; ctx.beginPath(); ctx.roundRect(lx - tw / 2 - 2, ly - 11, tw + 4, 15, 7.5); ctx.fill(); ctx.fillStyle = own ? "#e7dcc4" : "#f1c453"; ctx.fillText(t, lx, ly); }); }
-  for (const t of thieves) if (!t.gone) {   // a name tag above every thief, drawn with the badges so the dark does not hide it; the first one also says what to do
-    const lb = S.tips.thiefTag ? Tx("LOPOV") : Tx`LOPOV · dodirni ga +${THIEF.reward} $`, h = 22 * Math.max(1.5, 22 / (20 * pxPerU())) + 6;
+  if (!S.tips.thiefTag) for (const t of thieves) if (!t.gone) {   // only the very first thief gets a name tag (drawn with the badges, above the dark), so the player discovers him; later thieves sneak in the dark
+    const lb = Tx`LOPOV · dodirni ga +${THIEF.reward} $`, h = 22 * Math.max(1.5, 22 / (20 * pxPerU())) + 6;
     ctx.font = "700 11px Barlow, sans-serif"; ctx.textAlign = "center"; const tw = ctx.measureText(lb).width + 12, ty = t.y + UPV.y * h, tx = t.x + UPV.x * h;
     uprightAt(ctx, tx, ty, () => { ctx.fillStyle = "rgba(10,10,16,.88)"; ctx.beginPath(); ctx.roundRect(tx - tw / 2, ty - 12, tw, 16, 8); ctx.fill(); ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 1.2; ctx.stroke();
       ctx.fillStyle = "#ffd24a"; ctx.fillText(lb, tx, ty); });
